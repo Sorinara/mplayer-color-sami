@@ -1,25 +1,4 @@
-/*
- * Subtitle reader with format autodetection
- *
- * Copyright (c) 2001 laaz
- * Some code cleanup & realloc() by A'rpi/ESP-team
- *
- * This file is part of MPlayer.
- *
- * MPlayer is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * MPlayer is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with MPlayer; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
- */
+#define _GNU_SOURCE   
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,6 +9,10 @@
 #include <sys/types.h>
 #include "subreader_sami.h"
 
+
+char *subtitle_line[5000][16] = {NULL};
+
+/*
 int strmget(char *string, const char *start_string, const char *end_string, char *middle_string_buffer, char **next)
 {
     char *start_string_p,
@@ -355,15 +338,64 @@ int sami_tag_parse(char *font_tag_string, char **ass_buffer_cat, int *tag_start_
     free(font_tag_string);
     *ass_buffer_cat = strdup(ass_buffer_cat_temp);
     return return_value;
+} */
+
+int Subtitle_Devide(const char *sami_filepath, int *sync_time_line_max)
+{
+    FILE *fp;
+    int br_line,
+        br_length,
+        sync_time_line;
+    char line_buf[1024],
+         *br_start_po,
+         *br_end_po;
+
+    if((fp = fopen(sami_filepath, "r")) == NULL){
+        perror("Subtitle Open Error");
+        return -1;
+    }
+
+    sync_time_line = 0;
+
+    while(fgets(line_buf, sizeof(line_buf), fp) != NULL){
+        br_start_po = line_buf;
+        br_end_po   = NULL;
+        br_line     = 0;
+
+        // if exist br tag
+        while((br_end_po = strcasestr(br_start_po, "<br>")) != NULL){
+            br_length = br_end_po - br_start_po;
+
+            subtitle_line[sync_time_line][br_line] = strndup(br_start_po, br_length);
+
+            br_start_po = br_end_po + strlen("<br>");
+            br_line++;
+
+        }
+        
+        // last line
+        subtitle_line[sync_time_line][br_line] = strndup(br_start_po, strlen(br_start_po) - 1);
+        sync_time_line ++;
+    }
+
+    *sync_time_line_max = sync_time_line;
+    fclose(fp);
+    return 0;
 }
 
 int main(int argc, char *argv[])
 {
     int i,
-        line;
+        j,
+        sync_time_line_max = -1;
 
-    for(i = 0;i < line;i ++){
-        sami_tag_parse();
+    Subtitle_Devide(argv[1], &sync_time_line_max);
+
+    for(j = 0;j < sync_time_line_max;j ++){
+        for(i = 0; subtitle_line[j][i] != NULL;i ++){
+            printf("%d %s\n", i, subtitle_line[j][i]);
+            //sami_tag_parse();
+        }
     }
 
     return 0;
