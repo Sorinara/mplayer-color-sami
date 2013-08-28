@@ -9,10 +9,10 @@
 #include <sys/types.h>
 #include "subreader_sami.h"
 
+#define LINE_LEN 512
 
 char *subtitle_line[5000][16] = {NULL};
 
-/*
 int strmget(char *string, const char *start_string, const char *end_string, char *middle_string_buffer, char **next)
 {
     char *start_string_p,
@@ -141,7 +141,7 @@ void sami_tag_ass(char *ass_tag_buffer, const char *font_name, const char *color
     }
 }
 
-void sami_tag_parse_property(char *tag_property_buffer)
+void sami_tag_parse_property_font(char *tag_property_buffer)
 {
     while(1){
         // <font face='abc' color="0x123456">
@@ -154,6 +154,7 @@ void sami_tag_parse_property(char *tag_property_buffer)
         if((strcasecmp(tag_property_buffer, "face")) == 0){
             sami_tag_value_parse(tag_font_face, tag_value);
         }
+
         // get value (font name or color rgb)
         if(strmget(tag_body, "=",  " ", tag_value,    NULL) < 0){
             if(strmget(tag_body, "=",  NULL, tag_value,    NULL) < 0){
@@ -163,7 +164,7 @@ void sami_tag_parse_property(char *tag_property_buffer)
     }
 }
 
-int sami_tag_parse_get(char *tag_body_buffer, char *last_po)
+int sami_tag_parse_get(char *tag_po, char *tag_body_buffer, char **last_po)
 {
     // get all tag
     strmget(tag_po, "<", ">", tag_body_buffer, last_po);
@@ -174,7 +175,7 @@ int sami_tag_parse_get(char *tag_body_buffer, char *last_po)
 
     return 0;
 }
-
+/*
 int sami_tag_parse_name_get(char *tag_body_buffer, char *tag_name_buffer, char *last_po)
 {
     // get tag name (font)
@@ -194,12 +195,11 @@ int sami_tag_parse_start(char *tag_name_source, char *tag_name_target, int *tag_
     // printf("Value      : %s\n", tag_value);
     // printf("Next       : %s\n\n", s);
     return 1;
-}
+} */
 
 // return 0 : no end tag
-// return 1 : not exist start tag
-// return 2 : start tag, end_tag all ok
-int sami_tag_parse_end(char *tag_body, char *tag_name, int tag_start_flag, int *tag_end_flag)
+// return 1 : end tag
+int sami_tag_check(char *tag_body, char *tag_name)
 {
     // first charecter is '/' -> end(close) tag
     if(*tag_body != '/'){
@@ -211,37 +211,10 @@ int sami_tag_parse_end(char *tag_body, char *tag_name, int tag_start_flag, int *
         return 0;
     }
 
-    // match tag_name
-    *tag_end_flag   = 1;
-
-    // start_tag 0, end_tag 1 => 1
-    // start tag 1, end tag 1 => 2
-    return tag_start_flag + 1;
+    return 1;
 }
 
-int sami_tag_flag_check(int *tag_start_flag, int *tag_end_flag)
-{
-    if(*tag_start_flag == 0 && *tag_end_flag == 0){
-        return 0;
-    }
-
-    // dismatch tag_name
-    if(*tag_start_flag == 0 && *tag_end_flag == 1){
-        return 1;
-    }
-
-    if(*tag_start_flag == 1 && *tag_end_flag == 0){
-        return 2;
-    }
-
-    if(*tag_start_flag == 1 && *tag_end_flag == 1){
-        return 3;
-    }
-
-    return 4;
-}
-
-int sami_tag_parse(char *font_tag_string, char **ass_buffer_cat, int *tag_start_flag, int *tag_end_flag)
+int sami_tag_parse(char *font_tag_string)
 {
     // 이해 데이터들은 반드시 초기화 되어야 함.
     char tag_body[LINE_LEN]                 = {0},
@@ -250,11 +223,9 @@ int sami_tag_parse(char *font_tag_string, char **ass_buffer_cat, int *tag_start_
          tag_value[256]                     = {0},
          tag_text[LINE_LEN / 2]             = {0},
          ass_buffer_cat_temp[LINE_LEN * 3]  = {0};
-    int  font_start_flag = 0,
-         font_end_flag   = 0,
-         tag_text_index = 0,
-         return_value   = 0;
-    char *tag_po = font_tag_string;
+    int  tag_text_index = 0;
+    char *tag_po = font_tag_string,
+         *last_po;
 
     char *input_array[]  = {"font", "face", "color", 0};
     char *output_array[] = {"font", "face", "color", 0};
@@ -267,22 +238,20 @@ int sami_tag_parse(char *font_tag_string, char **ass_buffer_cat, int *tag_start_
     while(*tag_po != '\0'){
         switch(*tag_po){
             case '<' :
-                if(sami_tag_parse_get(&tag_body, &tag_po) != 0){
+                if(sami_tag_parse_get(tag_po, tag_body, &last_po) != 0){
                     break;
                 }
 
-                switch(sami_tag_parse_end(tag_body, input_array[0], start_flag, &end_flag)){
+                printf("%s-%s\n", font_tag_string, tag_body);
+                sami_tag_parse_property_font(tag_body);
+
+                switch(sami_tag_check(tag_body, input_array[0]);
+                    // 값 넣기
                     case 0:
-                        break;
-                    // (start:X, end:O) 전에꺼(old) 사용, 사용후(old)초기화
-                    case 1:
-                        sami_tag_ass(ass_buffer, tag_font_face_old, tag_font_color_old, tag_text);
-                        memset(&tag_font_face_old, 0, sizeof(tag_font_face_old));
-                        memset(&tag_font_color_old, 0, sizeof(tag_font_color_old));
-                        continue;
-                    // (start:O, end:O) 현재것(now)사용, now, old 모두 초기화
-                    case 2:
                         sami_tag_ass(ass_buffer, tag_font_face, tag_font_color, tag_text);
+                        continue;
+                    // 초기화
+                    case 1:
                         memset(&tag_font_face_old, 0, sizeof(tag_font_face_old));
                         memset(&tag_font_color_old, 0, sizeof(tag_font_color_old));
                         memset(&tag_font_face, 0, sizeof(tag_font_face));
@@ -294,40 +263,19 @@ int sami_tag_parse(char *font_tag_string, char **ass_buffer_cat, int *tag_start_
                         continue;
                 }
 
+                /*
                 sami_tag_parse_name_get(tag_body, tag_name);
 
                 if(sami_tag_parse_start(tag_name, input_array[0], &font_start_flag) != 0){
                     break;
-                }
-
-                sami_tag_parse_property();
-
+                } */
                 break;
             default :
                 // no include tag, accure in buffer
-                tag_text[tag_text_index++] = *tag_po++;
+                tag_text[tag_text_index++] = *last_po++;
                 break;
         }
-    }
-
-    switch(sami_tag_flag_check(&start_flag, &end_flag)){
-        // (start:X, end:X)
-        case 0:
-            if(continue_flag == 1){
-                sami_tag_ass(ass_buffer, tag_font_face_old, tag_font_color_old, tag_text);
-                memset(&tag_font_face_old, 0, sizeof(tag_font_face_old));
-                memset(&tag_font_color_old, 0, sizeof(tag_font_color_old));
-            }
-            break;
-                // (start:O, end:X) 일단(now)사용, 나중을 위해(now)백업(old로)
-        case 2:
-                sami_tag_ass(ass_buffer, tag_font_face, tag_font_color, tag_text);
-                strcpy(tag_font_face_old, tag_font_face);
-                strcpy(tag_font_color_old, tag_font_color);
-                break;
-        default:
-                // error!
-                break;
+        tag_po++;
     }
 
     // for no tag string
@@ -335,10 +283,10 @@ int sami_tag_parse(char *font_tag_string, char **ass_buffer_cat, int *tag_start_
         sami_tag_ass(ass_buffer_cat_temp, tag_font_face, tag_font_color, tag_text);
     }
 
-    free(font_tag_string);
-    *ass_buffer_cat = strdup(ass_buffer_cat_temp);
+    //free(font_tag_string);
+    //*ass_buffer_cat = strdup(ass_buffer_cat_temp);
     return return_value;
-} */
+}
 
 int Subtitle_Devide(const char *sami_filepath, int *sync_time_line_max)
 {
@@ -393,8 +341,8 @@ int main(int argc, char *argv[])
 
     for(j = 0;j < sync_time_line_max;j ++){
         for(i = 0; subtitle_line[j][i] != NULL;i ++){
-            printf("%d %s\n", i, subtitle_line[j][i]);
-            //sami_tag_parse();
+            //printf("%d %s\n", i, subtitle_line[j][i]);
+            sami_tag_parse(subtitle_line[j][i]);
         }
     }
 

@@ -37,6 +37,11 @@ function Subtitle_Line_Get()
 
 rm -rf "$SUBTITLE_LINE_FILEPATH"
 
+if [ -z "$SAMI_FILEPATH" ];then
+    echo 'Usage :$'"$0" '"Sami filepath"'
+    exit 1
+fi
+
 # 1, (이 스크립트의 첫번째 파라미터) sami파일에서 자막부분(+TAG)만 빼온 임시파일 생성 (SYNC시간은 안들어감!!!)
 iconv -c -feuckr -tutf8 "$SAMI_FILEPATH" | perl -pe 's/\&nbsp\;//g,s/^\s*$//g,s///g' | egrep -v -i '<sami>|<\/sami\>|<body>|<\/body>' > "$PARSE_FILEPATH"
 
