@@ -5,13 +5,29 @@ SUBTITLE_LINE_FILEPATH="./result"
 SOURCE_FILEPATH="./subreader.c"
 BINARY_FILEPATH="./subreader"
 
+function Subtitle_Line_Valid()
+{
+    local Parse_filepath="$1"
+    local Parse_result_filepath="$2"
+    local Subtitle_line_valid_start=0
+    local Subtitle_line_valid_end=0
+
+    Subtitle_line_valid_start="$(fgrep -n -i '<sync start' "$Parse_filepath" | head -1 | cut -d ':' -f1)"
+    Subtitle_line_valid_end="$(fgrep   -n -i '<sync start' "$Parse_filepath" | tail -1 | cut -d ':' -f1)"
+
+    sed -n "$Subtitle_line_valid_start","$Subtitle_line_valid_end"p "$Parse_filepath" > "$Parse_result_filepath"
+}
+
 function Subtitle_Line_Get()
 {
     local Parse_filepath="$1"
     local Subtitle_Line_filepath="$2"
+    local Parse_valid_filepath="/tmp/Subtitle_Line_Get_$$"
     local Line=""
     local Sync_tag_flag=2
     local Sync_tag_old_flag=2
+
+    Subtitle_Line_Valid "$Parse_filepath" "$Parse_valid_filepath"
 
     while read Line;do
         case "$Line" in 
@@ -32,7 +48,8 @@ function Subtitle_Line_Get()
         fi
 
         Sync_tag_old_flag="$Sync_tag_flag"
-    done < "$Parse_filepath"
+    done < "$Parse_valid_filepath"
+    rm -rf "$Parse_valid_filepath"
 }
 
 rm -rf "$SUBTITLE_LINE_FILEPATH"
@@ -43,7 +60,8 @@ if [ -z "$SAMI_FILEPATH" ];then
 fi
 
 # 1, (이 스크립트의 첫번째 파라미터) sami파일에서 자막부분(+TAG)만 빼온 임시파일 생성 (SYNC시간은 안들어감!!!)
-iconv -c -feuckr -tutf8 "$SAMI_FILEPATH" | perl -pe 's/\&nbsp\;//g,s/^\s*$//g,s///g' | egrep -v -i '<sami>|<\/sami\>|<body>|<\/body>' > "$PARSE_FILEPATH"
+#iconv -c -feuckr -tutf8 "$SAMI_FILEPATH" | perl -pe 's/\&nbsp\;//g,s/^\s*$//g,s///g' | egrep -v -i '<style|<title>|<\/title>|<sami>|<\/sami\>|<body>|<\/body>' > "$PARSE_FILEPATH"
+iconv -c -feuckr -tutf8 "$SAMI_FILEPATH" | perl -pe 's/\&nbsp\;//g,s/^\s*$//g,s///g' > "$PARSE_FILEPATH"
 
 Subtitle_Line_Get "$PARSE_FILEPATH" "$SUBTITLE_LINE_FILEPATH"
 #cat "$SUBTITLE_LINE_FILEPATH"
