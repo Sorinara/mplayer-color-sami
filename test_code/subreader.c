@@ -13,6 +13,8 @@
 #define TAG_FONT_MAX_SIZE 32
 #define TAG_FONT_COLOR_MAX_SIZE 64
 
+#define TAG_PROPERTY_MAX 256
+
 char *subtitle_line[5000][16] = {NULL};
 
 typedef struct _tag_font{
@@ -59,7 +61,7 @@ int strmget(char *string, const char *start_string, const char *end_string, char
     return middle_string_size;
 }
 
-void sami_tag_value_color(char *save_buffer, char *value)
+void sami_tag_value_color(char *value, char *save_buffer, char **last_po)
 {
     char *start,
          *end;
@@ -74,12 +76,13 @@ void sami_tag_value_color(char *save_buffer, char *value)
         case '"' :
             start += 1;
             end   -= 1;
-            if(*start == '#' ){
-                start++;
-            }
             break;
         default :
             break;
+    }
+
+    if(*start == '#' ){
+        start++;
     }
 
     valid_string_length = end - start + 1;
@@ -148,29 +151,29 @@ void sami_tag_ass(char *ass_tag_buffer, const char *font_name, const char *color
     }
 }
 
-void sami_tag_parse_property_font(char *tag_body)
+int sami_tag_parse_property(char *tag_body)
 {
-    char tag_property[256] = {0},
-         tag_value[256]    = {0};
+    char property_name[TAG_PROPERTY_MAX], 
+         value_parse[TAG_PROPERTY_MAX],
+         *property_name_last_po,
+         *property_value_last_po,
+         *property_po,
+         *property_last_po;
+    int loop_status = 0;
 
-    while(1){
-        // <font face='abc' color="0x123456">
+    property_po = tag_body;
+
+    // <font face='abc' color="0x123456">
+    while(*property_po != '\0'){
         // get property (face/color)
-        if(strmget(tag_body, " ",  "=",  tag_property, NULL) < 0 ){
+        if(strmget(property_po, NULL,  "=",  property_name, &property_name_last_po) < 0 ){
+            loop_status = -1;
             break;
         }
 
-        // face or color
-        if((strcasecmp(tag_property, "face")) == 0){
-            sami_tag_value_color(tag_property, tag_value);
-        }
-
-        // get value (font name or color rgb)
-        if(strmget(tag_body, "=",  " ", tag_value,    NULL) < 0){
-            if(strmget(tag_body, "=",  NULL, tag_value,    NULL) < 0){
-                break;
-            }
-        }
+        sami_tag_value_color(property_name_last_po, value_parse, &property_last_po);
+        printf("P:%s V:%s\n", property_name, value_parse);
+        property_po = property_value_last_po;
     }
 }
 
@@ -189,24 +192,16 @@ int sami_tag_parse_get(char *tag_po, char *tag_body, char **last_po)
 int sami_tag_parse_name_get(char *tag_body, char *tag_name, char **last_po)
 {
     // get tag name (font)
-    return strmget(tag_body, NULL, " ", tag_name, last_po);
-} 
-
-/*
-int sami_tag_parse_start(char *tag_name_source, char *tag_name_target, int *tag_start_flag)
-{
-    if((strcasecmp(tag_name_source, tag_name_target)) == 0 ){
-        *tag_start_flag = 1;
-        return 0;
+    if(strmget(tag_body, NULL, " ", tag_name, last_po) < 0){
+        return -1;
     }
 
-    // printf("Body       : %s\n", tag_body);
-    // printf("Name       : %s\n", tag_name_source);
-    // printf("Property   : %s\n", tag_property_buffer);
-    // printf("Value      : %s\n", tag_value);
-    // printf("Next       : %s\n\n", s);
-    return 1;
-} */
+    while(**last_po == ' '){
+        *last_po++;
+    }
+
+    return 0;
+} 
 
 // return 0 : no end tag
 // return 1 : end tag
@@ -235,26 +230,24 @@ int sami_tag_parse(char *font_tag_string)
     int  tag_text_index = 0;
     char *tag_po = font_tag_string,
          *tag_body_last_po,
-         *last_po,
-         *input_array[4]  = {"font", "face", "color", 0},
-         *output_array[4] = {0};
-    // input  {"font", "face", "color", 0}
-    // output {0,      "굴림", "0x928374, "텍스트입니다"
+         *tag_last_po;
 
     while(*tag_po != '\0'){
         switch(*tag_po){
             case '<' :
-                if(sami_tag_parse_get(tag_po, tag_body, &last_po) != 0){
+                if(sami_tag_parse_get(tag_po, tag_body, &tag_last_po) != 0){
                     break;
                 }
 
-                sami_tag_parse_name_get(tag_body, tag_name, &tag_body_last_po);
+                if(sami_tag_parse_name_get(tag_body, tag_name, &tag_body_last_po) < 0){
+                    break;
+                }
 
-                if(strcasecmp(tag_name, "font") == 0){
-                    sami_tag_parse_property_font(tag_body);
+                if(sami_tag_parse_property(tag_body_last_po) < 0){
+                    break;
                 }
                 /*
-                switch(sami_tag_check(tag_body, input_array[0]);
+                switch(sami_tag_check(tag_body, tag_font_property_input[0]);
                     case 0:
                         sami_tag_ass(ass_buffer, tag_font_face, tag_font_color, tag_text);
                         continue;
@@ -263,14 +256,14 @@ int sami_tag_parse(char *font_tag_string)
                         memset(&tag_font_color, 0, sizeof(tag_font_color));
                         memset(&tag_text, 0, sizeof(tag_text));
                         tag_text_index  = 0;
-                        tag_po = last_po;
+                        tag_po = tag_last_po;
                         continue;
                 }  */
 
                 break;
             default :
                 // no include tag, accure in buffer
-                tag_text[tag_text_index++] = *last_po++;
+                tag_text[tag_text_index++] = *tag_last_po++;
                 break;
         }
         tag_po++;
