@@ -9,18 +9,22 @@
 #include <sys/types.h>
 #include "subreader_sami.h"
 
-#define LINE_LEN 512
-#define TAG_FONT_MAX_SIZE 32
-#define TAG_FONT_COLOR_MAX_SIZE 64
-
+#define SAMI_LINE_MAX 512
 #define TAG_PROPERTY_MAX 256
 
 char *subtitle_line[5000][16] = {NULL};
 
-typedef struct _tag_font{
-    char font[TAG_FONT_MAX_SIZE],
-         color[TAG_FONT_COLOR_MAX_SIZE];
-} Tag_font;
+typedef struct _Tag_Property{
+    char *name,
+         *value;
+} Tag_Property;
+
+typedef struct _Tag{
+    char *name;
+    int property_count;
+
+    Tag_Property property[TAG_PROPERTY_MAX];
+} Tag;
 
 int strmget(char *string, const char *start_string, const char *end_string, char *middle_string_buffer, char **next)
 {
@@ -65,26 +69,23 @@ void sami_tag_value_color(char *value, char *save_buffer, char **last_po)
 {
     char *start,
          *end;
-    int value_length = 0,
-        valid_string_length = 0;
+    int valid_string_length = 0;
 
-    value_length = strlen(value);
-    start        = value;
-    end          = start + value_length;
+    start = value;
+    end   = start + strlen(value);
 
-    switch(*value){
+    switch(*start){
         case '"' :
             start += 1;
             end   -= 1;
             break;
-        default :
-            break;
     }
 
     if(*start == '#' ){
-        start++;
+        start ++;
     }
 
+    *last_po            = end;
     valid_string_length = end - start + 1;
     snprintf(save_buffer, valid_string_length, "%s", start);
 }
@@ -151,30 +152,38 @@ void sami_tag_ass(char *ass_tag_buffer, const char *font_name, const char *color
     }
 }
 
-int sami_tag_parse_property(char *tag_body)
+int sami_tag_parse_property(char *tag_body, char *tag_name, Tag *tag_data)
 {
-    char property_name[TAG_PROPERTY_MAX], 
-         value_parse[TAG_PROPERTY_MAX],
-         *property_name_last_po,
-         *property_value_last_po,
+    char property_name_buffer[TAG_PROPERTY_MAX], 
+         value_parse_buffer[TAG_PROPERTY_MAX],
          *property_po,
-         *property_last_po;
-    int loop_status = 0;
+         *property_name_last_po     = NULL,
+         *property_value_last_po    = NULL;
+    int property_count   = 0;
+
+    // 먼저 태그명 부터 복사하자
+    tag_data->name = strdup(tag_name);
 
     property_po = tag_body;
 
     // <font face='abc' color="0x123456">
     while(*property_po != '\0'){
         // get property (face/color)
-        if(strmget(property_po, NULL,  "=",  property_name, &property_name_last_po) < 0 ){
-            loop_status = -1;
-            break;
+        if(strmget(property_po, NULL,  "=",  property_name_buffer, &property_name_last_po) < 0 ){
+            // free 
+            return -1;
         }
 
-        sami_tag_value_color(property_name_last_po, value_parse, &property_last_po);
-        printf("P:%s V:%s\n", property_name, value_parse);
+        sami_tag_value_color(property_name_last_po, value_parse_buffer, &property_value_last_po);
+        tag_data->property[property_count].name  = strdup(property_name_buffer);
+        tag_data->property[property_count].value = strdup(value_parse_buffer);
+
         property_po = property_value_last_po;
+        property_count ++;
     }
+
+    tag_data->property_count = property_count;
+    return 0;
 }
 
 int sami_tag_parse_get(char *tag_po, char *tag_body, char **last_po)
@@ -214,7 +223,7 @@ int sami_tag_check(char *tag_body, char *tag_name)
 
     // dismatch tag_name
     if((strcasecmp(tag_body + 1, tag_name)) != 0 ){
-        return 0;
+        return 2;
     }
 
     return 1;
@@ -222,15 +231,17 @@ int sami_tag_check(char *tag_body, char *tag_name)
 
 int sami_tag_parse(char *font_tag_string)
 {
-    // 이해 데이터들은 반드시 초기화 되어야 함.
-    char tag_body[LINE_LEN]                 = {0},
-         tag_name[16]                       = {0},
-         tag_text[LINE_LEN / 2]             = {0},
-         ass_buffer_cat_temp[LINE_LEN * 3]  = {0};
-    int  tag_text_index = 0;
-    char *tag_po = font_tag_string,
-         *tag_body_last_po,
-         *tag_last_po;
+    // 이해 데이터들은 초기화 되어야 함.
+    char tag_body[SAMI_LINE_MAX]                = {0},
+         tag_name[16]                           = {0},
+         tag_text[SAMI_LINE_MAX / 2]            = {0},
+         ass_buffer_cat_temp[SAMI_LINE_MAX * 3] = {0},
+         *tag_po = font_tag_string,
+         *tag_last_po,
+         *tag_name_last_po;
+    int  tag_text_index = 0,
+         i;
+    Tag  tag_data;
 
     while(*tag_po != '\0'){
         switch(*tag_po){
@@ -239,26 +250,31 @@ int sami_tag_parse(char *font_tag_string)
                     break;
                 }
 
-                if(sami_tag_parse_name_get(tag_body, tag_name, &tag_body_last_po) < 0){
+                if(sami_tag_parse_name_get(tag_body, tag_name, &tag_name_last_po) < 0){
                     break;
                 }
 
-                if(sami_tag_parse_property(tag_body_last_po) < 0){
-                    break;
-                }
-                /*
-                switch(sami_tag_check(tag_body, tag_font_property_input[0]);
+                switch(sami_tag_check(tag_body, tag_name)){
                     case 0:
-                        sami_tag_ass(ass_buffer, tag_font_face, tag_font_color, tag_text);
+                        if(sami_tag_parse_property(tag_name_last_po, tag_name, &tag_data) < 0){
+                            break;
+                        }
+
+                        for(i = 0;i < tag_data.property_count;i ++){
+                            printf("KK: %s, %s\n", tag_data.property[i].name, tag_data.property[i].value);
+                        }
+                        // infinite loop
                         continue;
                     case 1:
+                        /*
+                        sami_tag_ass(ass_buffer, tag_font_face, tag_font_color, tag_text);
                         memset(&tag_font_face, 0, sizeof(tag_font_face));
                         memset(&tag_font_color, 0, sizeof(tag_font_color));
                         memset(&tag_text, 0, sizeof(tag_text));
-                        tag_text_index  = 0;
+                        tag_text_index  = 0; */
                         tag_po = tag_last_po;
                         continue;
-                }  */
+                }
 
                 break;
             default :
