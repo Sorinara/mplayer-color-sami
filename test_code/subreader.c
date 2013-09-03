@@ -362,8 +362,8 @@ int sami_tag_parse(char *font_tag_string, Tag **tag_stack)
          tag_name[16]                           = {0},
          tag_text[SAMI_LINE_MAX / 2]            = {0},
          ass_buffer_cat_temp[SAMI_LINE_MAX * 3] = {0},
-         *tag_po = font_tag_string,
-         *tag_last_po,
+         *tag_po      = font_tag_string,
+         *tag_last_po = font_tag_string,
          *tag_name_last_po;
     int  tag_type        = 0,
          tag_text_index  = 0,
@@ -371,7 +371,7 @@ int sami_tag_parse(char *font_tag_string, Tag **tag_stack)
     Tag  tag_push,
          tag_pop;
 
-    //printf("Line    : %s\n", tag_po);
+    printf("Line    : %s\n", tag_po);
     while(*tag_po != '\0'){
         switch(*tag_po){
             case '<':
@@ -411,7 +411,7 @@ int sami_tag_parse(char *font_tag_string, Tag **tag_stack)
                             break;
                         }
                         
-                        printf("Text: '%s'\n", tag_text);
+                        //printf("-Text: '%s'\n", tag_text);
                         /*
                         for(i = 0;i < tag_pop.property_count;i ++){
                             printf("Property : (%d/%d) '%s' '%s'\n", i, tag_pop.property_count, tag_pop.property[i].name, tag_pop.property[i].value);
@@ -433,15 +433,16 @@ int sami_tag_parse(char *font_tag_string, Tag **tag_stack)
                 }
 
                 // 밑에 tag_po++가 있어서 미리 한번 빼줘야 함.
-                tag_po = tag_last_po - 1;
+                tag_po = tag_last_po;
                 break;
             default :
                 // no include tag, accure in buffer
-                tag_text[tag_text_index++] = *tag_last_po++;
+                tag_text[tag_text_index++] = *tag_po++;
                 break;
         }
-        tag_po++;
     }
+
+    printf("+Text: '%s'\n", tag_text);
 
     // for no tag string
     //puts("- BR Line -");
