@@ -7,8 +7,11 @@
 #include <ctype.h>
 
 #include <sys/types.h>
-#include <assert.h>
 #include "subreader_sami.h"
+
+#define TAG_START           0
+#define TAG_END             1
+#define TAG_ERROR           2
 
 #define SAMI_LINE_MAX       512
 #define TAG_PROPERTY_MAX    256
@@ -115,7 +118,6 @@ int sami_tag_stack_top(Tag **stack, unsigned int stack_max_size)
     return --i;
 }
 
-// dynamic allocation
 int sami_tag_stack_push(Tag **stack, unsigned int stack_max_size, Tag *element)
 {
     int stack_top;
@@ -369,87 +371,64 @@ int sami_tag_parse(char *font_tag_string, Tag **tag_stack)
     Tag  tag_push,
          tag_pop;
 
-    //puts("Intro");
-    //sami_tag_stack_print(tag_stack, TAG_STACK_MAX);
-    //puts("");
-
-    printf("Line    : %s\n", tag_po);
+    //printf("Line    : %s\n", tag_po);
     while(*tag_po != '\0'){
         switch(*tag_po){
-            case '<' :
+            case '<':
                 if(sami_tag_get(tag_po, tag_body, &tag_last_po) != 0){
-                    puts("ER1");
+                    puts("Not close Tag?");
+                    exit(100);
                     break;
                 }
-
-                if((tag_type = sami_tag_name_get(tag_body, tag_name, &tag_name_last_po)) < 0){
-                    puts("ER2");
-                    break;
-                }
-
-                /*
-                //printf("Ha? : '%s' '%s' '%s'\n", tag_body, tag_name, tag_last_po);
-                if(strcasecmp(tag_name, "font") != 0){
+                /* if(strcasecmp(tag_name, "font") != 0){
                     break;
                 }  */
-
-                switch(tag_type){
-                    case 0:
-                        if(strcmp(tag_text, "") != 0){
-
-                        }
-
+                switch(tag_type = sami_tag_name_get(tag_body, tag_name, &tag_name_last_po)){
+                    case TAG_START:
                         if(sami_tag_parse_property(tag_name_last_po, tag_name, &tag_push) < 0){
-                            puts("ER3");
+                            puts("Tag Property Error");
+                            exit(200);
                             break;
                         }
-
                         //printf("Push     : '%s' '%s'\n", tag_push.name, tag_body);
-
-                        // ignore overflow
-                        //puts("Stack push");
-                        //puts("Before");
+                        //puts("Stack push - Before");
                         //sami_tag_stack_print(tag_stack, TAG_STACK_MAX);
                         sami_tag_stack_push(tag_stack, TAG_STACK_MAX, &tag_push);
-                        printf("After (add '%s')\n", tag_name);
+                        //printf("After (add '%s')\n", tag_name);
                         //sami_tag_stack_print(tag_stack, TAG_STACK_MAX);
-                        //puts("");
                         break;
-                    case 1:
-                        puts("Stack pop");
-                        puts("Before");
-                        sami_tag_stack_print(tag_stack, TAG_STACK_MAX);
+                    case TAG_END:
+                        //puts("Stack pop - Before");
+                        //sami_tag_stack_print(tag_stack, TAG_STACK_MAX);
                         sami_tag_stack_pop(tag_stack, TAG_STACK_MAX, &tag_pop);
-                        printf("After (delete '%s')\n", tag_name);
-                        sami_tag_stack_print(tag_stack, TAG_STACK_MAX);
-
-                        printf("Next: '%s'\n", tag_last_po);
-                        puts("");
-
+                        //printf("After (delete '%s')\n", tag_name);
+                        //sami_tag_stack_print(tag_stack, TAG_STACK_MAX);
+                        //printf("Next: '%s'\n", tag_last_po);
                         //바로 이전태그의 시작과 지금태그(끝)이 같아야 함.
                         if(sami_tag_check(tag_name, tag_pop.name, tag_type) < 1){
-                            printf("DF : '%s' '%s'\n", tag_push.name, tag_pop.name);
-                            assert(1);
-                            exit(100);
+                            printf("Not match tag sequence : '%s' '%s'\n", tag_push.name, tag_pop.name);
+                            exit(300);
                             break;
                         }
-
+                        
+                        printf("Text: '%s'\n", tag_text);
                         /*
                         for(i = 0;i < tag_pop.property_count;i ++){
                             printf("Property : (%d/%d) '%s' '%s'\n", i, tag_pop.property_count, tag_pop.property[i].name, tag_pop.property[i].value);
                         }   */
 
+                        /*
                         // color 정보 가져옴 (rt, face는 아직...)
                         //sami_tag_font_get();
-                        /*
                         sami_tag_ass(ass_buffer, tag_font_face, tag_font_color, tag_text);
                         memset(&tag_font_face, 0, sizeof(tag_font_face));
-                        memset(&tag_font_color, 0, sizeof(tag_font_color));
+                        memset(&tag_font_color, 0, sizeof(tag_font_color)); */
                         memset(&tag_text, 0, sizeof(tag_text));
-                        tag_text_index  = 0; */
+                        tag_text_index  = 0;
                         break;
-                    case 2:
+                    case TAG_ERROR:
                         puts("Type Error 2?");
+                        exit(400);
                         break;
                 }
 
@@ -464,8 +443,8 @@ int sami_tag_parse(char *font_tag_string, Tag **tag_stack)
         tag_po++;
     }
 
-    puts("- BR Line -");
     // for no tag string
+    //puts("- BR Line -");
     /*
     if(strcmp(tag_text, "") != 0){
         sami_tag_ass(ass_buffer_cat_temp, tag_font_face, tag_font_color, tag_text);
