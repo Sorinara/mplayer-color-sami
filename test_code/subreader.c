@@ -9,8 +9,9 @@
 #include <sys/types.h>
 #include "subreader_sami.h"
 
-#define SAMI_LINE_MAX 512
-#define TAG_PROPERTY_MAX 256
+#define SAMI_LINE_MAX       512
+#define TAG_PROPERTY_MAX    256
+#define TAG_STACK_MAX       32
 
 char *subtitle_line[5000][16] = {NULL};
 
@@ -25,6 +26,77 @@ typedef struct _Tag{
 
     Tag_Property property[TAG_PROPERTY_MAX];
 } Tag;
+
+/* Remove leading and trailing space */
+void trail_space(char *s) {
+	int i = 0;
+	while (isspace(s[i])) ++i;
+	if (i) strcpy(s, s + i);
+	i = strlen(s) - 1;
+	while (i > 0 && isspace(s[i])) s[i--] = '\0';
+}
+
+char* strstrip(char *s)
+{
+    trail_space(s);
+    return strdup(s);
+}
+
+void sav_tag_stack_all_free()
+{
+
+}
+
+// return == -1 : underflow
+// return == -2 : overflow
+int sami_tag_stack_top(Tag **stack, unsigned int stack_max_size)
+{
+    int i,
+        flag = 0;
+
+    for(i = 0;i < stack_max_size;i ++){
+        if(stack[i] == NULL){
+            flag = 1;
+            break;
+        }
+    }
+
+    if(flag == 0){
+        return -2;
+    }
+
+    return --i;
+}
+
+// dynamic allocation
+int sami_tag_stack_push(Tag **stack, unsigned int stack_max_size, Tag *element)
+{
+    int stack_top;
+
+    // check overflow
+    if((stack_top = sami_tag_stack_top(stack, stack_max_size)) == -2){
+        return -1;
+    }
+
+    stack[stack_top + 1] = (Tag*)calloc(1, sizeof(Tag));
+    memcpy(stack[stack_top + 1], element, sizeof(Tag));
+    return 0;
+}
+
+int sami_tag_stack_pop(Tag **stack, unsigned int stack_max_size, Tag *element)
+{
+    int stack_top;
+
+    // check underflow
+    if((stack_top = sami_tag_stack_top(stack, stack_max_size)) == -1){
+        return -1;
+    }
+    
+    memcpy(element, stack[stack_top], sizeof(Tag));
+    free(stack[stack_top]);
+    stack[stack_top] = NULL;
+    return 0;
+}
 
 int strmget(char *string, const char *start_string, const char *end_string, char *middle_string_buffer, char **next)
 {
@@ -71,13 +143,15 @@ void sami_tag_value_color(char *value, char *save_buffer, char **last_po)
          *end;
     int valid_string_length = 0;
 
-    start = value;
-    end   = start + strlen(value);
+    start       = value;
+    end         = start + strlen(value);
+    *last_po    = end;
 
     switch(*start){
         case '"' :
-            start += 1;
-            end   -= 1;
+            start   += 1;
+            end      = strchr(start, '"');
+            *last_po = end + 1;
             break;
     }
 
@@ -85,7 +159,6 @@ void sami_tag_value_color(char *value, char *save_buffer, char **last_po)
         start ++;
     }
 
-    *last_po            = end;
     valid_string_length = end - start + 1;
     snprintf(save_buffer, valid_string_length, "%s", start);
 }
@@ -175,9 +248,10 @@ int sami_tag_parse_property(char *tag_body, char *tag_name, Tag *tag_data)
         }
 
         sami_tag_value_color(property_name_last_po, value_parse_buffer, &property_value_last_po);
-        tag_data->property[property_count].name  = strdup(property_name_buffer);
-        tag_data->property[property_count].value = strdup(value_parse_buffer);
 
+        tag_data->property[property_count].name  = strstrip(property_name_buffer);
+        tag_data->property[property_count].value = strstrip(value_parse_buffer);
+        //printf("N: '%s' '%s'\n", tag_data->property[property_count].name, tag_data->property[property_count].value);
         property_po = property_value_last_po;
         property_count ++;
     }
@@ -186,7 +260,7 @@ int sami_tag_parse_property(char *tag_body, char *tag_name, Tag *tag_data)
     return 0;
 }
 
-int sami_tag_parse_get(char *tag_po, char *tag_body, char **last_po)
+int sami_tag_get(char *tag_po, char *tag_body, char **last_po)
 {
     // get all tag
     strmget(tag_po, "<", ">", tag_body, last_po);
@@ -198,11 +272,17 @@ int sami_tag_parse_get(char *tag_po, char *tag_body, char **last_po)
     return 0;
 }
 
-int sami_tag_parse_name_get(char *tag_body, char *tag_name, char **last_po)
+int sami_tag_name_get(char *tag_body, char *tag_name, char **last_po)
 {
+    // first charecter is '/' -> end(close) tag
+    if(*tag_body == '/'){
+        sprintf(tag_name, "%s", tag_body);
+        return 1;
+    }
+
     // get tag name (font)
     if(strmget(tag_body, NULL, " ", tag_name, last_po) < 0){
-        return -1;
+        sprintf(tag_name, "%s", tag_body);
     }
 
     while(**last_po == ' '){
@@ -214,16 +294,11 @@ int sami_tag_parse_name_get(char *tag_body, char *tag_name, char **last_po)
 
 // return 0 : no end tag
 // return 1 : end tag
-int sami_tag_check(char *tag_body, char *tag_name)
+int sami_tag_check(char *tag_push_name, char *tag_pop_name, int tag_type)
 {
-    // first charecter is '/' -> end(close) tag
-    if(*tag_body != '/'){
+    // dismatch tag_push_name
+    if((strcasecmp(tag_push_name, tag_pop_name)) != 0 ){
         return 0;
-    }
-
-    // dismatch tag_name
-    if((strcasecmp(tag_body + 1, tag_name)) != 0 ){
-        return 2;
     }
 
     return 1;
@@ -239,43 +314,73 @@ int sami_tag_parse(char *font_tag_string)
          *tag_po = font_tag_string,
          *tag_last_po,
          *tag_name_last_po;
-    int  tag_text_index = 0,
+    int  tag_type        = 0,
+         tag_text_index  = 0,
          i;
-    Tag  tag_data;
+    Tag  tag_push,
+         tag_pop,
+         *tag_stack[TAG_STACK_MAX] = {NULL};
+
+    memset(tag_stack, 0, sizeof(tag_stack));
 
     while(*tag_po != '\0'){
         switch(*tag_po){
             case '<' :
-                if(sami_tag_parse_get(tag_po, tag_body, &tag_last_po) != 0){
+                if(sami_tag_get(tag_po, tag_body, &tag_last_po) != 0){
                     break;
                 }
 
-                if(sami_tag_parse_name_get(tag_body, tag_name, &tag_name_last_po) < 0){
+                if((tag_type = sami_tag_name_get(tag_body, tag_name, &tag_name_last_po)) < 0){
                     break;
                 }
 
-                switch(sami_tag_check(tag_body, tag_name)){
+                /*
+                //printf("Ha? : '%s' '%s' '%s'\n", tag_body, tag_name, tag_last_po);
+                if(strcasecmp(tag_name, "font") != 0){
+                    break;
+                }  */
+
+                switch(tag_type){
                     case 0:
-                        if(sami_tag_parse_property(tag_name_last_po, tag_name, &tag_data) < 0){
+                        if(strcmp(tag_text, "") != 0){
+
+                        }
+
+                        if(sami_tag_parse_property(tag_name_last_po, tag_name, &tag_push) < 0){
                             break;
                         }
 
-                        for(i = 0;i < tag_data.property_count;i ++){
-                            printf("KK: %s, %s\n", tag_data.property[i].name, tag_data.property[i].value);
+                        for(i = 0;i < tag_push.property_count;i ++){
+                            printf("(%d/%d) '%s' '%s'\n", i, tag_push.property_count, tag_push.property[i].name, tag_push.property[i].value);
                         }
-                        // infinite loop
-                        continue;
+
+                        // ignore overflow
+                        sami_tag_stack_push(tag_stack, TAG_STACK_MAX, &tag_push);
+                        break;
                     case 1:
+                        sami_tag_stack_pop(tag_stack, TAG_STACK_MAX, &tag_pop);
+
+                        printf("N  %s %s %s\n", tag_push.name, tag_pop.name, tag_body);
+
+                        //바로 이전태그의 시작과 지금태그(끝)이 같아야 함.
+                        //if(sami_tag_check(tag_push.name, tag_pop.name, tag_type) < 1){
+                        //   break;
+                        //}
+                        // color 정보 가져옴 (rt, face는 아직...)
+                        //sami_tag_font_get();
                         /*
                         sami_tag_ass(ass_buffer, tag_font_face, tag_font_color, tag_text);
                         memset(&tag_font_face, 0, sizeof(tag_font_face));
                         memset(&tag_font_color, 0, sizeof(tag_font_color));
                         memset(&tag_text, 0, sizeof(tag_text));
                         tag_text_index  = 0; */
-                        tag_po = tag_last_po;
-                        continue;
+                        break;
+                    case 2:
+                        puts("HA?");
+                        break;
                 }
 
+                tag_po = tag_last_po;
                 break;
             default :
                 // no include tag, accure in buffer
