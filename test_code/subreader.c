@@ -240,7 +240,7 @@ int sami_tag_ass_colors(const char *color_name, char *color_buffer)
     return color_value;
 }
 
-void sami_tag_ass(char *ass_tag_buffer, const char *font_name, const char *color_value, const char *text)
+void sami_tag_ass(char *ass_tag_buffer, const char *font_face, const char *color_value, const char *text)
 {
     // must be init 0
     char color_value_buffer[7]      = {0},
@@ -327,7 +327,7 @@ int sami_tag_name_get(char *tag_body, char *tag_name, char **last_po)
 {
     // first charecter is '/' -> end(close) tag
     if(*tag_body == '/'){
-        sprintf(tag_name, "%s", tag_body);
+        sprintf(tag_name, "%s", tag_body + 1);
         return 1;
     }
 
@@ -355,23 +355,40 @@ int sami_tag_check(char *tag_push_name, char *tag_pop_name, int tag_type)
     return 1;
 }
 
-int sami_tag_parse(char *font_tag_string, Tag **tag_stack)
+int sami_tag_font_property_get(Tag tag, char *font_face_buffer, char *font_color_buffer)
+{
+    int i;
+
+    for(i = 0;i < tag.property_count;i ++){
+        if(strcasecmp(tag.property[i].name, "face") == 0){
+            sprintf(font_face_buffer, "%s", tag.property[i].value);
+        }else if(strcasecmp(tag.property[i].name, "color") == 0){
+            sprintf(font_color_buffer, "%s", tag.property[i].value);
+        }
+    }
+}
+
+int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
 {
     // 이해 데이터들은 초기화 되어야 함.
     char tag_body[SAMI_LINE_MAX]                = {0},
          tag_name[16]                           = {0},
          tag_text[SAMI_LINE_MAX / 2]            = {0},
-         ass_buffer_cat_temp[SAMI_LINE_MAX * 3] = {0},
+         ass_buffer[SAMI_LINE_MAX * 2]          = {0},
+         ass_buffer_cat[SAMI_LINE_MAX * 3]      = {0},
+         tag_font_face[SAMI_LINE_MAX / 2]       = {0},
+         tag_font_color[SAMI_LINE_MAX / 2]      = {0},
          *tag_po      = font_tag_string,
          *tag_last_po = font_tag_string,
          *tag_name_last_po;
     int  tag_type        = 0,
          tag_text_index  = 0,
-         i;
+         i,
+         stack_index;
     Tag  tag_push,
          tag_pop;
 
-    printf("Line    : %s\n", tag_po);
+    //printf("Line    : %s\n", tag_po);
     while(*tag_po != '\0'){
         switch(*tag_po){
             case '<':
@@ -380,17 +397,22 @@ int sami_tag_parse(char *font_tag_string, Tag **tag_stack)
                     exit(100);
                     break;
                 }
-                /* if(strcasecmp(tag_name, "font") != 0){
+
+                tag_type = sami_tag_name_get(tag_body, tag_name, &tag_name_last_po);
+
+                if(strcasecmp(tag_name, "font") != 0){
+                    //printf("TT : %s\n", tag_name);
+                    tag_po = tag_last_po;
                     break;
-                }  */
-                switch(tag_type = sami_tag_name_get(tag_body, tag_name, &tag_name_last_po)){
+                }
+
+                switch(tag_type){
                     case TAG_START:
                         if(sami_tag_parse_property(tag_name_last_po, tag_name, &tag_push) < 0){
                             puts("Tag Property Error");
                             exit(200);
                             break;
                         }
-                        //printf("Push     : '%s' '%s'\n", tag_push.name, tag_body);
                         //puts("Stack push - Before");
                         //sami_tag_stack_print(tag_stack, TAG_STACK_MAX);
                         sami_tag_stack_push(tag_stack, TAG_STACK_MAX, &tag_push);
@@ -400,37 +422,39 @@ int sami_tag_parse(char *font_tag_string, Tag **tag_stack)
                     case TAG_END:
                         //puts("Stack pop - Before");
                         //sami_tag_stack_print(tag_stack, TAG_STACK_MAX);
-                        sami_tag_stack_pop(tag_stack, TAG_STACK_MAX, &tag_pop);
+                        if(sami_tag_stack_pop(tag_stack, TAG_STACK_MAX, &tag_pop) < 0){
+                            break;
+                        }
                         //printf("After (delete '%s')\n", tag_name);
                         //sami_tag_stack_print(tag_stack, TAG_STACK_MAX);
                         //printf("Next: '%s'\n", tag_last_po);
                         //바로 이전태그의 시작과 지금태그(끝)이 같아야 함.
-                        if(sami_tag_check(tag_name, tag_pop.name, tag_type) < 1){
+                        if(sami_tag_check(tag_name, tag_pop.name, tag_type) < 0){
                             printf("Not match tag sequence : '%s' '%s'\n", tag_push.name, tag_pop.name);
                             exit(300);
                             break;
                         }
                         
-                        //printf("-Text: '%s'\n", tag_text);
-                        /*
-                        for(i = 0;i < tag_pop.property_count;i ++){
-                            printf("Property : (%d/%d) '%s' '%s'\n", i, tag_pop.property_count, tag_pop.property[i].name, tag_pop.property[i].value);
-                        }   */
-
-                        /*
-                        // color 정보 가져옴 (rt, face는 아직...)
-                        //sami_tag_font_get();
+                        // color 정보만 가져옴 (rt, face는 아직...)
+                        sami_tag_font_property_get(tag_pop, tag_font_face, tag_font_color);
                         sami_tag_ass(ass_buffer, tag_font_face, tag_font_color, tag_text);
+                        strcat(ass_buffer_cat, ass_buffer);
                         memset(&tag_font_face, 0, sizeof(tag_font_face));
-                        memset(&tag_font_color, 0, sizeof(tag_font_color)); */
+                        memset(&tag_font_color, 0, sizeof(tag_font_color));
                         memset(&tag_text, 0, sizeof(tag_text));
                         tag_text_index  = 0;
+                        // if tag_text is empty, go last
+                        if(strcmp(tag_text, "") != 0){
+                            printf("K : '%s' '%s'\n", tag_text, ass_buffer);
+                        }
                         break;
                     case TAG_ERROR:
                         puts("Type Error 2?");
                         exit(400);
                         break;
                 }
+
+                //printf("+Text: '%s'\n", tag_text);
 
                 // 밑에 tag_po++가 있어서 미리 한번 빼줘야 함.
                 tag_po = tag_last_po;
@@ -442,17 +466,22 @@ int sami_tag_parse(char *font_tag_string, Tag **tag_stack)
         }
     }
 
-    printf("+Text: '%s'\n", tag_text);
-
     // for no tag string
     //puts("- BR Line -");
-    /*
-    if(strcmp(tag_text, "") != 0){
-        sami_tag_ass(ass_buffer_cat_temp, tag_font_face, tag_font_color, tag_text);
-    } */
+    if(strcmp(tag_text, "") != 0 ){
+        if((stack_index = sami_tag_stack_top(tag_stack, TAG_STACK_MAX)) >= 0){
+            tag_pop = *(tag_stack[stack_index]);
+            sami_tag_font_property_get(tag_pop, tag_font_face, tag_font_color);
+            sami_tag_ass(ass_buffer, tag_font_face, tag_font_color, tag_text);
+        }else{
+            sprintf(ass_buffer, "%s", tag_text);
+        }
 
-    //free(font_tag_string);
-    //*ass_buffer_cat = strdup(ass_buffer_cat_temp);
+        strcat(ass_buffer_cat, ass_buffer);
+        //printf("k : '%s' -> '%s'\n", tag_text, ass_buffer);
+    }
+
+    *sami_ass_text = strdup(ass_buffer_cat);
     return 0;
 }
 
@@ -505,12 +534,15 @@ int main(int argc, char *argv[])
         j,
         sync_time_line_max = -1;
     Tag *tag_stack[TAG_STACK_MAX] = {NULL};
+    char *sami_ass_text;
 
     Subtitle_Devide(argv[1], &sync_time_line_max);
 
     for(j = 0;j < sync_time_line_max;j ++){
         for(i = 0; subtitle_line[j][i] != NULL;i ++){
-            sami_tag_parse(subtitle_line[j][i], tag_stack);
+            sami_tag_parse(tag_stack, subtitle_line[j][i], &sami_ass_text);
+            printf("%s\n", sami_ass_text);
+            free(sami_ass_text);
         }
         sami_tag_stack_free_all(tag_stack, TAG_STACK_MAX);
     }
