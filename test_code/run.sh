@@ -1,6 +1,8 @@
 SAMI_FILEPATH="$1"
 
 PARSE_FILEPATH="/tmp/mplayer_run_parse_$$"
+COMPILE_LOG_FILEPATH="/tmp/run_compile_log_$$"
+DEBUGER_LOG_FILEPATH="/tmp/run_dbg_log_$$"
 SUBTITLE_LINE_FILEPATH="./result"
 SOURCE_FILEPATH="./subreader.c"
 BINARY_FILEPATH="./subreader"
@@ -68,12 +70,14 @@ clear
 
 # 1, 소스 컴파일
 echo -n 'Source Compile ...'
-gcc -g -o "$BINARY_FILEPATH" "$SOURCE_FILEPATH"
-if [ $? != 0 ];then
-    echo '[Failed]'
+gcc -Wall -g -o "$BINARY_FILEPATH" "$SOURCE_FILEPATH" 2>"$COMPILE_LOG_FILEPATH"
+if [ -s "$COMPILE_LOG_FILEPATH" ];then
+    echo
+    cat "$COMPILE_LOG_FILEPATH"
+    rm -rf "$COMPILE_LOG_FILEPATH";echo '[Failed]'
     exit 1
 fi
-echo '[OK]'
+rm -rf "$COMPILE_LOG_FILEPATH";echo '[OK]'
 
 # 2, (이 스크립트의 첫번째 파라미터) sami파일에서 자막부분(+TAG)만 빼온 임시파일 생성 (SYNC시간은 안들어감!!!)
 echo -n 'Convert Locale ...'
@@ -88,5 +92,13 @@ rm -rf "$PARSE_FILEPATH" 2>/dev/null
 echo '[OK]'
 
 # 4, 3에서 생성된 임시파일을 바이너리의 첫번째 파리미터에 넣어서 실행
-echo 'Run!'
-"$BINARY_FILEPATH" "$SUBTITLE_LINE_FILEPATH"
+
+echo -n 'Select mode (run/v) :'
+read Option
+
+if [ "$Option" = 'v' ];then
+    valgrind --leak-check=full --show-reachable=yes "$BINARY_FILEPATH" "$SUBTITLE_LINE_FILEPATH" 2>"$DEBUGER_LOG_FILEPATH"
+    vim "$DEBUGER_LOG_FILEPATH"
+else
+    "$BINARY_FILEPATH" "$SUBTITLE_LINE_FILEPATH"
+fi
