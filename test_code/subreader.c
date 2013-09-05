@@ -31,6 +31,24 @@ typedef struct _Tag{
     Tag_Property property[TAG_PROPERTY_MAX];
 } Tag;
 
+char* next_delimiter(char *start, char delminiter)
+{
+    char *next;
+
+    next = start;
+
+    while((next = strchr(next, delminiter)) != NULL){
+
+        if(*(next - 1) != '\\'){
+           break; 
+        }
+
+        next ++;
+    }
+
+    return next;
+}
+
 int strstripdup(char *string, char **strip_string)
 {
     int i = 0,
@@ -112,7 +130,6 @@ int strmdup(char *string, const char *start_string, const char *end_string, char
 
 int strmstrip(char *string, const char *start_string, const char *end_string, char **middle_string, char **next)
 {
-    /*
     char *start_po,
          *end_po,
          *string_valid;
@@ -127,19 +144,12 @@ int strmstrip(char *string, const char *start_string, const char *end_string, ch
 	while(isspace(*end_po) != 0) --end_po;
 
     string_valid_length = end_po - start_po;
-
-    //string_valid = strndup(start_po, string_valid_length);
-    printf("QQ1: '%s' '%p' %d\n", start_po, start_po, string_valid_length);
-    string_valid = calloc(string_valid_length + 10, 1);
-    printf("QQ1: '%s' '%p' %d\n", start_po, start_po, string_valid_length);
-    memcpy(string_valid, start_po, string_valid_length);
-    printf("QQ2: '%s' '%p' '%s' '%d'\n", start_po, start_po, string_valid, strlen(string_valid));
+    string_valid = strndup(start_po, string_valid_length);
     strmdup(string_valid, start_string, end_string, middle_string, next);
     free(string_valid);
 
-    printf("Next :'%s'\n", next);
-    return 0;  */
-    return strmdup(string, start_string, end_string, middle_string, next);
+    return 0;
+    //return strmdup(string, start_string, end_string, middle_string, next);
 }
 
 void sami_tag_stack_free(Tag stack)
@@ -183,11 +193,11 @@ void sami_tag_stack_print(Tag **stack, unsigned int stack_max_size)
     }
 
     if(i == 0){
-        puts("Stack Empty");
+        printf("Stack Empty\n");
     }
 
     if(i + 1 == stack_max_size){
-        puts("Stack Full");
+        printf("Stack Full\n");
     }
 }
 
@@ -244,7 +254,7 @@ int sami_tag_stack_pop(Tag **stack, unsigned int stack_max_size, Tag *element)
     return 0;
 }
 
-void sami_tag_value_get(const char *property_name, char *head_po, char **value_parse, char **last_po)
+int sami_tag_value_get(const char *property_name, char *head_po, char **value_parse, char **last_po)
 {
     char *start_po,
          *end_po;
@@ -258,7 +268,9 @@ void sami_tag_value_get(const char *property_name, char *head_po, char **value_p
     switch(*start_po){
         case '"' :
             start_po   += 1;
-            end_po      = strchr(start_po, '"');
+            if((end_po = next_delimiter(start_po, '"')) == NULL){
+                return -1;
+            }
             break;
     }
 
@@ -268,17 +280,17 @@ void sami_tag_value_get(const char *property_name, char *head_po, char **value_p
         }
     }
 
-    *last_po    = start_po + strlen(start_po);
-    end_po      = *last_po;
+    // EOP
+    *last_po = end_po;
 
+    // white search?!
     // delete end space character
 	while(isspace(*end_po) != 0) --end_po;
 
-    // +1 -> for NULL
     valid_string_length = end_po - start_po;
     *value_parse = strndup(start_po, valid_string_length);
 
-    printf("Idol : '%s'\n", start_po);
+    return 0;
 }
 
 int sami_tag_ass_colors(const char *color_name, char *color_buffer)
@@ -470,16 +482,14 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
     while(*tag_po != '\0'){
         switch(*tag_po){
             case '<':
-                puts("");
                 if(sami_tag_get(tag_po, &tag_body, &tag_last_po) != 0){
                     // '>'로 닫히지 않는 태그 - 현재 태그 무시함
-                    printf("%s\n", tag_po);
-                    puts("ERROR> Failed Tag");
+                    fprintf(stderr, "ERROR Tag '%s'\n", tag_po);
                     break;
                 }
 
                 if((tag_type = sami_tag_name_get(tag_body, &tag_name, &tag_name_last_po)) < 0){
-                    puts("ERROR> Failed Tag name");
+                    fprintf(stderr, "ERROR Tag name\n");
                     tag_po = tag_last_po;
                     free(tag_body);
                     break;
@@ -498,8 +508,7 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                         if(sami_tag_parse_property(&tag_push, tag_name_last_po, tag_name) < 0){
                             free(tag_name);
                             free(tag_body);
-                            puts("Tag Property Error");
-                            exit(200);
+                            fprintf(stderr, "Tag Property Error\n");
                             break;
                         } // no break!
                     case TAG_START:
@@ -513,7 +522,7 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                         //puts("Stack pop - Before");
                         //sami_tag_stack_print(tag_stack, TAG_STACK_MAX);
                         if(sami_tag_stack_pop(tag_stack, TAG_STACK_MAX, &tag_pop) < 0){
-                            puts("Under flow");
+                            fprintf(stderr, "Under flow\n");
                             break;
                         }
                         //printf("After (delete '%s')\n", tag_name);
@@ -544,10 +553,11 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                         tag_text_index  = 0;
 
                         // if text is empty, go last
+                        /*
                         if(strcmp(text, "") != 0){
-                            printf("face : '%s', color : '%s'\n", tag_font_face, tag_font_color);
-                            printf("K : '%s' '%s'\n", text, ass_buffer);
-                        }
+                            printf("'%s' => face : '%s', color : '%s'\n", text, tag_font_face, tag_font_color);
+                            printf("'%s'\n", text, ass_buffer);
+                        } */
                         break;
                 }
 
@@ -648,6 +658,7 @@ int main(int argc, char *argv[])
             sami_tag_parse(tag_stack, subtitle_line[j][i], &sami_ass_text);
             printf("%s\n", sami_ass_text);
             free(sami_ass_text);
+            free(subtitle_line[j][i]);
         }
         sami_tag_stack_free_all(tag_stack, TAG_STACK_MAX);
     }
