@@ -38,7 +38,6 @@ char* next_delimiter(char *start, char delminiter)
     next = start;
 
     while((next = strchr(next, delminiter)) != NULL){
-
         if(*(next - 1) != '\\'){
            break; 
         }
@@ -46,16 +45,16 @@ char* next_delimiter(char *start, char delminiter)
         next ++;
     }
 
+    // add 'delminter' size
     return next;
 }
 
-int strstripdup(char *string, char **strip_string)
+int strstrip(char *string, char **start_po, int *string_strip_length, char **next)
 {
-    int i = 0,
+    int i,
         start_index,
         end_index,
-        string_length,
-        strip_string_length;
+        string_length;
 
     string_length = strlen(string);
 
@@ -69,23 +68,32 @@ int strstripdup(char *string, char **strip_string)
     start_index = i;
 
     // search non white space end
-	for(i = 0;i < string_length;i ++){
+	for(;i < string_length;i ++){
         if(isspace(string[i]) != 0){
             break;
         }
     }
 
-    end_index    = i;
+    end_index  = i;
 
     // delete white space
-	for(i = 0;i < string_length;i ++){
+	for(;i < string_length;i ++){
         if(isspace(string[i]) == 0){
             break;
         }
     }
 
-    strip_string_length = end_index - start_index;
-    *strip_string       = strndup(string + start_index, strip_string_length);
+    if(next != NULL){
+        *next = string + i;
+    }
+
+    if(start_index == end_index){
+        return -1;
+    }
+
+    *start_po            = string + start_index;
+    *string_strip_length = end_index - start_index;
+
     return 0;
 }
 
@@ -128,28 +136,39 @@ int strmdup(char *string, const char *start_string, const char *end_string, char
     return middle_string_size;
 }
 
-int strmstrip(char *string, const char *start_string, const char *end_string, char **middle_string, char **next)
+int strstripdup(char *string, char **strip_string, char **next)
 {
-    char *start_po,
-         *end_po,
-         *string_valid;
-    int string_valid_length = 0;
+    int  strip_string_length;
+    char *start_po;
+    
+    if(strstrip(string, &start_po, &strip_string_length, next) < 0){
+        return -1;
+    }
+
+    *strip_string = strndup(start_po, strip_string_length);
+    
+    return 0;
+}
+
+int sami_tag_property_name_get(char *string, char **middle_string, char **next)
+{
+    char *start_po;
 
     start_po = string;
-	while(isspace(*start_po) != 0) ++start_po;
 
-    end_po = start_po + strlen(start_po);
+	while(*start_po != '\0'){
+        if(isspace(*start_po) == 0){
+            break;
+        }
+        ++start_po;
+    }
 
-    // delete end space character
-	while(isspace(*end_po) != 0) --end_po;
+    if(strmdup(start_po, NULL, "=", middle_string, next) < 0){
+        return -2;
+    }
 
-    string_valid_length = end_po - start_po;
-    string_valid = strndup(start_po, string_valid_length);
-    strmdup(string_valid, start_string, end_string, middle_string, next);
-    free(string_valid);
-
+    fprintf(stderr, "Test - Property Names : '%s' '%s' '%s' '%s'\n", string, start_po, *middle_string, *next);
     return 0;
-    //return strmdup(string, start_string, end_string, middle_string, next);
 }
 
 void sami_tag_stack_free(Tag stack)
@@ -254,7 +273,7 @@ int sami_tag_stack_pop(Tag **stack, unsigned int stack_max_size, Tag *element)
     return 0;
 }
 
-int sami_tag_value_get(const char *property_name, char *head_po, char **value_parse, char **last_po)
+int sami_tag_property_value_get(const char *property_name, char *head_po, char **value_parse, char **last_po)
 {
     char *start_po,
          *end_po;
@@ -262,33 +281,48 @@ int sami_tag_value_get(const char *property_name, char *head_po, char **value_pa
 
     // delete first white space
     start_po = head_po;
-	while(isspace(*start_po) != 0) ++start_po;
+
+    if(start_po == NULL){
+        return -1;
+    }
+
+	while(*start_po != '\0'){
+        if(isspace(*start_po) == 0){
+            break;
+        }
+        ++start_po;
+    }
 
     // "font" tag, "color" or "face" property
     switch(*start_po){
         case '"' :
             start_po   += 1;
+
             if((end_po = next_delimiter(start_po, '"')) == NULL){
-                return -1;
+                return -2;
             }
+
+            *last_po = end_po + 1;
+            break;
+        default:
+            if((end_po = next_delimiter(start_po, ' ')) == NULL){
+                end_po = start_po + strlen(start_po);
+                *last_po = end_po;
+                break;
+            }
+
+            *last_po = end_po;
             break;
     }
 
-    if(strcasecmp(property_name, "color") == 0){
-        if(*start_po == '#' ){
-            start_po ++;
-        }
+    if(*start_po == '#' && strcasecmp(property_name, "color") == 0){
+        start_po ++;
     }
 
     // EOP
-    *last_po = end_po;
-
-    // white search?!
-    // delete end space character
-	while(isspace(*end_po) != 0) --end_po;
-
     valid_string_length = end_po - start_po;
-    *value_parse = strndup(start_po, valid_string_length);
+    *value_parse        = strndup(start_po, valid_string_length);
+    fprintf(stderr, "Test - Property Value : '%s' '%s' '%s' %d -> '%s'\n", head_po, start_po, end_po, valid_string_length, *value_parse);
 
     return 0;
 }
@@ -369,21 +403,32 @@ int sami_tag_parse_property(Tag *tag_data, char *tag_body, char *tag_name)
 
     // <font face='abc' color="0x123456">
     while(*property_po != '\0'){
-        // get property (face/color)
-        if(strmstrip(property_po, NULL,  "=",  &property_name, &property_name_last_po) < 0 ){
+        // get property name(face/color)
+        if(sami_tag_property_name_get(property_po, &property_name, &property_name_last_po) < 0 ){
             // free 
             return -1;
         }
 
-        sami_tag_value_get(property_name, property_name_last_po, &value, &property_value_last_po);
+        // get property value
+        if(sami_tag_property_value_get(property_name, property_name_last_po, &value, &property_value_last_po) < 0){
+            // free
+            return -2;
+        }
+
         tag_data->property[property_count].name  = property_name;
         tag_data->property[property_count].value = value;
-        //printf("PRP: '%s' '%s'\n", tag_data->property[property_count].name, tag_data->property[property_count].value);
         property_po = property_value_last_po;
         property_count ++;
     }
 
     tag_data->property_count = property_count;
+
+    int i;
+
+    for(i = 0;i < tag_data->property_count;i ++){
+        fprintf(stderr, "Test - Property Loop  : '%d' '%s' '%s'\n", i, tag_data->property[i].name, tag_data->property[i].value);
+    }
+
     return 0;
 }
 
@@ -409,7 +454,7 @@ int sami_tag_name_get(char *tag_body, char **tag_name, char **last_po)
 
     // first charecter is '/' -> end(close) tag (</font>)
     if(*tag_body == '/'){
-        strstripdup(tag_body + 1, tag_name);
+        strstripdup(tag_body + 1, tag_name, NULL);
         *last_po    = NULL;
         tag_type    = TAG_END;
     // get tag name "<font color="blue">" (have property)
@@ -420,7 +465,7 @@ int sami_tag_name_get(char *tag_body, char **tag_name, char **last_po)
         tag_type = TAG_START_PROPERTY;
     // get tag_name "<ruby>" (not have property)
     }else{
-        strstripdup(tag_body, tag_name);
+        strstripdup(tag_body, tag_name, NULL);
         *last_po    = NULL;
         tag_type = TAG_START;
     }
@@ -447,10 +492,10 @@ int sami_tag_font_property_get(Tag tag, char **font_face_buffer, char **font_col
 
     for(i = 0;i < tag.property_count;i ++){
         if(strcasecmp(tag.property[i].name, "face") == 0){
-            *font_face_buffer = strdup(tag.property[i].value);
+            *font_face_buffer = tag.property[i].value;
             ret |= 1;
         }else if(strcasecmp(tag.property[i].name, "color") == 0){
-            *font_color_buffer = strdup(tag.property[i].value);
+            *font_color_buffer = tag.property[i].value;
             ret |= 2;
         }
     }
@@ -466,13 +511,12 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
          text[SAMI_LINE_MAX / 2]            = {0},
          ass_buffer[SAMI_LINE_MAX * 2]      = {0},
          ass_buffer_cat[SAMI_LINE_MAX * 3]  = {0},
-         *tag_font_face,
-         *tag_font_color,
+         *tag_font_face_po,
+         *tag_font_color_po,
          *tag_po      = font_tag_string,
          *tag_last_po = font_tag_string,
          *tag_name_last_po;
     int  tag_type           = 0,
-         tag_property_type  = 0,
          tag_text_index     = 0,
          stack_index;
     Tag  tag_push,
@@ -536,17 +580,12 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                         }
                         
                         // color 정보만 가져옴 (rt, face는 아직...)
-                        tag_property_type = sami_tag_font_property_get(tag_pop, &tag_font_face, &tag_font_color);
-                        sami_tag_ass(ass_buffer, tag_font_face, tag_font_color, text);
+                        // 다시 동적할당을 하는게 아니라, tag_stack에서 pop에서 할당된 주소만 가지고 온다.
+                        fprintf(stderr, "Test - Font Tag Property start\n");
+                        sami_tag_font_property_get(tag_pop, &tag_font_face_po, &tag_font_color_po);
+                        fprintf(stderr, "Test - Font Teg Result       : '%s' '%s' \n", tag_font_face_po, tag_font_color_po);
+                        sami_tag_ass(ass_buffer, tag_font_face_po, tag_font_color_po, text);
                         strcat(ass_buffer_cat, ass_buffer);
-
-                        if((tag_property_type & 0x01) == 1){
-                            free(tag_font_face);
-                        }
-
-                        if((tag_property_type & 0x02) == 1){
-                            free(tag_font_color);
-                        }
 
                         sami_tag_stack_free(tag_pop);
                         memset(&text, 0, sizeof(text));
@@ -555,7 +594,7 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                         // if text is empty, go last
                         /*
                         if(strcmp(text, "") != 0){
-                            printf("'%s' => face : '%s', color : '%s'\n", text, tag_font_face, tag_font_color);
+                            printf("'%s' => face : '%s', color : '%s'\n", text, tag_font_face_po, tag_font_color_po);
                             printf("'%s'\n", text, ass_buffer);
                         } */
                         break;
@@ -577,16 +616,8 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
     //puts("- BR Line -");
     if(strcmp(text, "") != 0 ){
         if((stack_index = sami_tag_stack_pop(tag_stack, TAG_STACK_MAX, &tag_pop)) >= 0){
-            tag_property_type = sami_tag_font_property_get(tag_pop, &tag_font_face, &tag_font_color);
-            sami_tag_ass(ass_buffer, tag_font_face, tag_font_color, text);
-            if((tag_property_type & 0x01) == 1){
-                free(tag_font_face);
-            }
-
-            if((tag_property_type & 0x02) == 1){
-                free(tag_font_color);
-            }
-
+            sami_tag_font_property_get(tag_pop, &tag_font_face_po, &tag_font_color_po);
+            sami_tag_ass(ass_buffer, tag_font_face_po, tag_font_color_po, text);
             sami_tag_stack_free(tag_pop);
         }else{
             sprintf(ass_buffer, "%s", text);

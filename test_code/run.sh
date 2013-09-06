@@ -97,7 +97,7 @@ echo -n 'Select mode (run/v) :'
 read Option
 
 if [ "$Option" = 'v' ];then
-    valgrind --leak-check=full --show-reachable=yes "$BINARY_FILEPATH" "$SUBTITLE_LINE_FILEPATH" 2>"$DEBUGER_LOG_FILEPATH"
+    valgrind -v --leak-check=full --show-reachable=yes "$BINARY_FILEPATH" "$SUBTITLE_LINE_FILEPATH" 2>"$DEBUGER_LOG_FILEPATH"
     vim "$DEBUGER_LOG_FILEPATH"
 else
     "$BINARY_FILEPATH" "$SUBTITLE_LINE_FILEPATH"
