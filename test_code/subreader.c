@@ -426,14 +426,12 @@ int sami_tag_parse_property(Tag *tag_data, char *tag_container, char *tag_name)
     while(*property_po != '\0'){
         // get property name(face/color)
         if(sami_tag_property_name_get(property_po, &property_name, &property_name_next_po) < 0 ){
-            // free 
-            return -1;
+            break;
         }
 
         // get property value
         if(sami_tag_property_value_get(property_name, property_name_next_po, &value, &property_value_next_po) < 0){
-            // free
-            return -2;
+            break;
         }
 
         tag_data->property[property_count].name  = property_name;
@@ -471,27 +469,27 @@ int sami_tag_container_get(char *tag_po, char **tag_container, char **next_po)
 // return 1 : end   tag => </font>
 int sami_tag_name_get(char *tag_container, char **tag_name, char **next_po)
 {
-    int tag_type;
+    int tag_property_type;
 
     // first charecter is '/' -> end(close) tag (</font>)
     if(*tag_container == '/'){
         tagstripdup(tag_container + 1, tag_name, NULL);
-        *next_po    = NULL;
-        tag_type    = TAG_END;
+        *next_po            = NULL;
+        tag_property_type   = TAG_END;
     // get tag name "<font color="blue">" (have property)
     }else if(tagmdup(tag_container, '\0', ' ', tag_name, next_po) > 0){
 
         // delete space
         while(**(next_po ++) == ' ');
-        tag_type = TAG_START_PROPERTY;
+        tag_property_type   = TAG_START_PROPERTY;
     // get tag_name "<ruby>" (not have property)
     }else{
         tagstripdup(tag_container, tag_name, NULL);
-        *next_po = NULL;
-        tag_type = TAG_START;
+        *next_po            = NULL;
+        tag_property_type   = TAG_START;
     }
 
-    return tag_type;
+    return tag_property_type;
 } 
 
 // return 0 : no end tag
@@ -540,7 +538,7 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
          text[SAMI_LINE_MAX / 2]            = {0},
          ass_buffer[SAMI_LINE_MAX * 2]      = {0},
          ass_buffer_cat[SAMI_LINE_MAX * 3]  = {0};
-    int  tag_type           = 0,
+    int  tag_property_type  = 0,
          tag_text_index     = 0;
     Tag  tag_push,
          tag_pop;
@@ -558,7 +556,7 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                     break;
                 }
 
-                if((tag_type = sami_tag_name_get(tag_container, &tag_name, &tag_property_start_po)) < 0){
+                if((tag_property_type = sami_tag_name_get(tag_container, &tag_name, &tag_property_start_po)) < 0){
                     fprintf(stderr, "ERROR Tag name\n");
                     tag_po = tag_next_po;
                     free(tag_container);
@@ -573,7 +571,7 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                     break;
                 }
 
-                switch(tag_type){
+                switch(tag_property_type){
                     case TAG_START_PROPERTY:
                         if(sami_tag_parse_property(&tag_push, tag_property_start_po, tag_name) < 0){
                             free(tag_name);
@@ -598,7 +596,7 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                         //fprintf(stderr, "After (delete '%s')\n", tag_name);
                         //sami_tag_stack_print(tag_stack, TAG_STACK_MAX);
                         //바로 이전태그의 시작과 지금태그(끝)이 같아야 함.
-                        if(sami_tag_check(tag_name, tag_pop.name, tag_type) < 0){
+                        if(sami_tag_check(tag_name, tag_pop.name, tag_property_type) < 0){
                             sami_tag_stack_free(tag_pop);
                             fprintf(stderr, "Not match tag sequence : '%s' '%s'\n", tag_push.name, tag_pop.name);
                             exit(300);

@@ -98,7 +98,12 @@ read Option
 
 if [ "$Option" = 'v' ];then
     valgrind -v --leak-check=full --show-reachable=yes "$BINARY_FILEPATH" "$SUBTITLE_LINE_FILEPATH" 2>"$DEBUGER_LOG_FILEPATH"
-    vim "$DEBUGER_LOG_FILEPATH"
+    if [ -z "$(fgrep 'ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)' "$DEBUGER_LOG_FILEPATH")" ];then
+        vim "$DEBUGER_LOG_FILEPATH"
+    else
+        echo valgrind, No ERROR ALL OK!
+    fi
+
 else
     "$BINARY_FILEPATH" "$SUBTITLE_LINE_FILEPATH"
 fi
