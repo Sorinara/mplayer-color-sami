@@ -301,11 +301,24 @@ int sami_tag_property_value_get(const char *property_name, char *head_po, char *
 
     // "font" tag, "color" or "face" property
     switch(*start_po){
+        case '\'' :
+            start_po   += 1;
+
+            if((end_po = next_delimiter(start_po, '\'')) == NULL){
+                if((end_po = next_delimiter(start_po, '"')) == NULL){
+                    return -2;
+                }
+            }
+
+            *next_po = end_po + 1;
+            break;
         case '"' :
             start_po   += 1;
 
             if((end_po = next_delimiter(start_po, '"')) == NULL){
-                return -2;
+                if((end_po = next_delimiter(start_po, '\'')) == NULL){
+                    return -2;
+                }
             }
 
             *next_po = end_po + 1;
