@@ -2,7 +2,6 @@ SAMI_FILEPATH="$1"
 
 . ./subtitle_line.sh
 
-PARSE_FILEPATH="/tmp/mplayer_run_parse_$$"
 COMPILE_LOG_FILEPATH="/tmp/run_compile_log_$$"
 DEBUGER_LOG_FILEPATH="/tmp/run_dbg_log_$$"
 SUBTITLE_LINE_FILEPATH="./result_run"
@@ -26,10 +25,14 @@ if [ -s "$COMPILE_LOG_FILEPATH" ];then
 fi
 rm -rf "$COMPILE_LOG_FILEPATH";echo '[OK]'
 
-echo -n 'Step 2> Get Valid Line ...'
-Subtitle_Line_Get "$PARSE_FILEPATH" "$SUBTITLE_LINE_FILEPATH"
+echo -n 'Step 2> Parse SAMI File ...'
+Subtitle_Line_Get "$SAMI_FILEPATH" "$SUBTITLE_LINE_FILEPATH"
+if [ $? != 0 ];then
+    echo Not Exist sami file "$SAMI_FILEPATH"
+    exit 2
+fi
+
 #cat "$SUBTITLE_LINE_FILEPATH"
-rm -rf "$PARSE_FILEPATH" 2>/dev/null
 echo '[OK]'
 
 # 3, 3에서 생성된 임시파일을 바이너리의 첫번째 파리미터에 넣어서 실행
@@ -40,6 +43,7 @@ if [ "$Option" = 'v' ];then
     valgrind -v --leak-check=full --show-reachable=yes "$BINARY_FILEPATH" "$SUBTITLE_LINE_FILEPATH" 2>"$DEBUGER_LOG_FILEPATH"
     if [ -z "$(fgrep 'ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)' "$DEBUGER_LOG_FILEPATH")" ];then
         vim "$DEBUGER_LOG_FILEPATH"
+        rm -rf "$DEBUGER_LOG_FILEPATH"
     else
         echo valgrind, No ERROR ALL OK!
     fi
