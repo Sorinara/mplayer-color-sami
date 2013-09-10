@@ -236,7 +236,6 @@ int sami_tag_stack_search(Tag **stack, const char *tag_name, unsigned int stack_
         return -1;
     }
 
-    fprintf(stderr, "What the fuck 1 : %d\n", i);
     return i;
 }
 
@@ -256,24 +255,27 @@ int sami_tag_stack_update(Tag **stack, char *tag_name, int stack_index, Tag *ele
     for(i = 0;i < element->property_count;i ++){
         property_count = stack[stack_index]->property_count;
 
-        fprintf(stderr, "ERROR : Tag '%s' '%s'\n", element->property[0].name, element->property[0].value);
         for(j = 0;j < property_count;j ++){
 
-            fprintf(stderr, "U: Tag '%s' '%s'\n", stack[stack_index]->property[i].name, element->property[j].name);
+            fprintf(stderr, "Test - Property Compare : '%s'('%s') '%s'('%s')\n", element->property[i].name, element->property[i].value, stack[stack_index]->property[j].name, stack[stack_index]->property[j].value);
 
             // match property, update value
             if(strcasecmp(element->property[i].name,  stack[stack_index]->property[j].name)  == 0 && \
                strcasecmp(element->property[i].value, stack[stack_index]->property[j].value) != 0){
-                free(element->property[i].value);
-                element->property[i].value = stack[stack_index]->property[j].value;
+                free(stack[stack_index]->property[j].value);
+                stack[stack_index]->property[j].value = element->property[i].value;
+                fprintf(stderr, "Test - Property Update  : '%s' '%s'\n", stack[stack_index]->property[j].name, stack[stack_index]->property[j].value);
                 update_flag = 1;
             }
+
+            fprintf(stderr, "Test - Property Compare : END\n");
         }
 
+        // not exist, add property
         if(update_flag == 0){
             stack[stack_index]->property[property_count].name  = element->property[i].name;
             stack[stack_index]->property[property_count].value = element->property[i].value;
-            fprintf(stderr, "ERROR : Tag '%s' '%s'\n", stack[stack_index]->property[property_count].name, stack[stack_index]->property[property_count].value);
+            fprintf(stderr, "Test - Proerty Add      : '%s' '%s'\n", stack[stack_index]->property[property_count].name, stack[stack_index]->property[property_count].value);
             (stack[stack_index]->property_count) ++;
         }
 
@@ -547,7 +549,7 @@ int sami_tag_parse_property(char *tag_property_start_po, Tag *tag_data)
 
     int i;
     for(i = 0;i < tag_data->property_count;i ++){
-        fprintf(stderr, "Test - Property Loop  : '%d' '%s' '%s'\n", i, tag_data->property[i].name, tag_data->property[i].value);
+        fprintf(stderr, "Test - Property Loop    : '%d' '%s' '%s'\n", i, tag_data->property[i].name, tag_data->property[i].value);
     }
 
     return ret;
@@ -654,6 +656,27 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
     while(*tag_po != '\0'){
         switch(*tag_po){
             case '<':
+                fprintf(stderr, "Test - Subtitle (TEXT)  : '%s'\n", text);
+
+                if(strcmp(text, "") != 0 ){
+                    if(sami_tag_stack_top(tag_stack, &tag_stack_top, TAG_STACK_MAX) >= 0){
+                        sami_tag_font_property_get(tag_stack_top, &stack_pop_face_po, &stack_pop_color_po);
+                        sami_tag_ass_font(ass_buffer, stack_pop_face_po, stack_pop_color_po, text);
+
+                        if(sami_tag_stack_top_remove(tag_stack, tag_stack_top, TAG_STACK_MAX) < 0){
+                            fprintf(stderr, "ERROR : Stack Delete Error\n");
+                            free(tag_name);
+                            break;
+                        }
+                    }else{
+                        sprintf(ass_buffer, "%s", text);
+                    }
+
+                    strcat(ass_buffer_cat, ass_buffer);
+                    fprintf(stderr, "Test - Accure ass tag : '%s' -> '%s' next: '%s'\n", text, ass_buffer, tag_po);
+                    memset(&text, 0, sizeof(text));
+                }
+
                 if(sami_tag_container_get(tag_po, &tag_container, &tag_next_po) != 0){
                     // not close '>' tag
                     tag_po += strlen(tag_po);
@@ -691,10 +714,11 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
 
                         if((tag_stack_push_index = sami_tag_stack_search(tag_stack, tag_name, TAG_STACK_MAX)) >= 0){
                             sami_tag_stack_update(tag_stack, tag_name, tag_stack_push_index, &tag_stack_push);
-
                         }else{
                             sami_tag_stack_push(tag_stack, tag_stack_push, TAG_STACK_MAX);
                         }
+
+                        sami_tag_stack_print(tag_stack, TAG_STACK_MAX);
                         break;
                     case TAG_END:
                         if(sami_tag_stack_top(tag_stack, &tag_stack_top, TAG_STACK_MAX) < 0){
@@ -715,10 +739,10 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                         // color 정보만 가져옴 (rt, face는 아직...)
                         // 다시 동적할당을 하는게 아니라, tag_stack에서 pop에서 할당된 주소만 가지고 온다.
                         sami_tag_font_property_get(tag_stack_top, &stack_pop_face_po, &stack_pop_color_po);
-                        fprintf(stderr, "Test - Font Tag Result: '%s' '%s' \n", stack_pop_face_po, stack_pop_color_po);
+                        fprintf(stderr, "Test - Font Tag Result  : '%s' '%s' \n", stack_pop_face_po, stack_pop_color_po);
                         sami_tag_ass_font(ass_buffer, stack_pop_face_po, stack_pop_color_po, text);
                         strcat(ass_buffer_cat, ass_buffer);
-                        fprintf(stderr, "Test - Ass  Tag Result: '%s' -> '%s' (Ac: '%s')\n", text, ass_buffer, ass_buffer_cat);
+                        fprintf(stderr, "Test - Ass  Tag Result  : '%s' -> '%s' (Ac: '%s')\n", text, ass_buffer, ass_buffer_cat);
 
                         if(sami_tag_stack_top_remove(tag_stack, tag_stack_top, TAG_STACK_MAX) < 0){
                             fprintf(stderr, "ERROR : Stack Delete Error\n");
@@ -818,9 +842,9 @@ int main(int argc, char *argv[])
 
     for(j = 0;j < sync_time_line_max;j ++){
         for(i = 0; subtitle_line[j][i] != NULL;i ++){
-            fprintf(stderr, "(count: %d / Line: %d)  : '%s'\n", j, i, subtitle_line[j][i]);
+            fprintf(stderr, "(count: %d / Line: %d)   : '%s'\n", j, i, subtitle_line[j][i]);
             sami_tag_parse(tag_stack, subtitle_line[j][i], &sami_ass_text);
-            fprintf(stderr, "Test - Final Result   : '%s'\n\n", sami_ass_text);
+            fprintf(stderr, "Test - Final Result     : '%s'\n\n", sami_ass_text);
             free(sami_ass_text);
             free(subtitle_line[j][i]);
         }
