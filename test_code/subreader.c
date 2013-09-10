@@ -143,18 +143,19 @@ int tagmdup(char *string, char start_char, char end_char, char **middle_string, 
     return middle_string_size;
 }/*}}}*/
 
-int tagstripdup(char *string, char **strip_string, char **next)
+int tagstripdup(char *string, char **strip_string)
 {/*{{{*/
     int  strip_string_length;
     char *start_po;
     
-    if(strstrip(string, &start_po, &strip_string_length, next) < 0){
+    // DO NOT USE fourth parameter
+    if(strstrip(string, &start_po, &strip_string_length, NULL) < 0){
         return -1;
     }
 
-    *strip_string = strndup(start_po, strip_string_length);
+    *strip_string   = strndup(start_po, strip_string_length);
     
-    return 0;
+    return strip_string_length;
 }/*}}}*/
 
 void sami_tag_stack_free(Tag *stack)
@@ -215,33 +216,71 @@ int sami_tag_stack_top(Tag **stack, Tag **element, unsigned int stack_max_size)
     return i;
 }
 
-int sami_tag_stack_search(Tag **stack, const char *tag_name, Tag **element, unsigned int stack_max_size) 
+int sami_tag_stack_search(Tag **stack, const char *tag_name, unsigned int stack_max_size) 
 {
     int i,
         match_flag = 0;
 
     for(i = 0;i < stack_max_size;i ++){
+        if(stack[i] == NULL){
+            break;
+        }
+
        if(strcasecmp(stack[i]->name, tag_name) == 0){
-            *element = stack[i];
             match_flag = 1;
             break;
        }
     }
 
-    if(match_flag == 1){
+    if(match_flag != 1){
         return -1;
     }
 
+    fprintf(stderr, "What the fuck 1 : %d\n", i);
     return i;
 }
 
-int sami_tag_stack_update(Tag **stack, int stack_index, Tag *element)
+int sami_tag_stack_update(Tag **stack, char *tag_name, int stack_index, Tag *element)
 {
-    int i;
+    int i,
+        j,
+        property_count,
+        update_flag = 0;
+
+    if(strcasecmp(stack[stack_index]->name, tag_name) != 0){
+        return -1;
+    }
 
     stack[stack_index]->name = element->name;
 
-    //for(i = 0;i < element
+    for(i = 0;i < element->property_count;i ++){
+        property_count = stack[stack_index]->property_count;
+
+        fprintf(stderr, "ERROR : Tag '%s' '%s'\n", element->property[0].name, element->property[0].value);
+        for(j = 0;j < property_count;j ++){
+
+            fprintf(stderr, "U: Tag '%s' '%s'\n", stack[stack_index]->property[i].name, element->property[j].name);
+
+            // match property, update value
+            if(strcasecmp(element->property[i].name,  stack[stack_index]->property[j].name)  == 0 && \
+               strcasecmp(element->property[i].value, stack[stack_index]->property[j].value) != 0){
+                free(element->property[i].value);
+                element->property[i].value = stack[stack_index]->property[j].value;
+                update_flag = 1;
+            }
+        }
+
+        if(update_flag == 0){
+            stack[stack_index]->property[property_count].name  = element->property[i].name;
+            stack[stack_index]->property[property_count].value = element->property[i].value;
+            fprintf(stderr, "ERROR : Tag '%s' '%s'\n", stack[stack_index]->property[property_count].name, stack[stack_index]->property[property_count].value);
+            (stack[stack_index]->property_count) ++;
+        }
+
+        update_flag = 0;
+    }
+
+    return 0;
 }
 
 int sami_tag_stack_push(Tag **stack, Tag element, unsigned int stack_max_size)
@@ -275,21 +314,29 @@ int sami_tag_stack_top_remove(Tag **stack, Tag *element, unsigned int stack_max_
 }
 
 int sami_tag_property_name_get(char *string, char **property_name_strip, char **next)
-{
-    char *property_name;
+{/*{{{*/
+    char *property_name,
+         *property_name_end_po;
 
-    if(tagmdup(string, '\0', '=', &property_name, NULL) < 0){
+    if(tagmdup(string, '\0', '=', &property_name, &property_name_end_po) < 0){
         return -1;
     }
 
-    if(tagstripdup(property_name, property_name_strip, next) < 0){
+    if(tagstripdup(property_name, property_name_strip) < 0){
         return -2;
     }
 
-    fprintf(stderr, "Test - Property Name : '%s' '%s' '%s'\n", string, *property_name_strip, *next);
+    // IF YOU DON'T KNOWH THIS, DO NOT MODIFY
+	while(isspace(*property_name_end_po) != 0){
+        property_name_end_po ++;
+    }
+
+    *next = property_name_end_po;
+
+    //fprintf(stderr, "Test - Property Name : '%s' '%s' '%s'\n", string, *property_name_strip, *next);
     free(property_name);
     return 0;
-}
+}/*}}}*/
 
 void sami_tag_stack_print(Tag **stack, unsigned int stack_max_size)
 {
@@ -320,7 +367,7 @@ void sami_tag_stack_print(Tag **stack, unsigned int stack_max_size)
 }
 
 int sami_tag_property_value_get(char *string, char **value, char **next_po)
-{
+{/*{{{*/
     char *start_po,
          *end_po;
     int  value_length = 0;
@@ -373,13 +420,12 @@ int sami_tag_property_value_get(char *string, char **value, char **next_po)
 
     value_length = end_po - start_po;
     *value       = strndup(start_po, value_length);
-    fprintf(stderr, "Test - Property Value : '%s' '%s' '%s' %d -> '%s'\n", string, start_po, end_po, value_length, *value);
-
+    //fprintf(stderr, "Test - Property Value : '%s' '%s' '%s' %d -> '%s'\n", string, start_po, end_po, value_length, *value);
     return 0;
-}
+}/*}}}*/
 
 int sami_tag_ass_colors(const char *color_name, char *color_buffer)
-{
+{/*{{{*/
     char first_char,
          *color_name_table[SAMI_COLORSET_ARRAY_MAX_ROW][SAMI_COLORSET_ARRAY_MAX_COLUMN]  = SAMI_COLORSET_ARRAY_NAME;
     unsigned int color_value_table[SAMI_COLORSET_ARRAY_MAX_ROW][SAMI_COLORSET_ARRAY_MAX_COLUMN] = SAMI_COLORSET_ARRAY_VALUE;
@@ -410,10 +456,10 @@ int sami_tag_ass_colors(const char *color_name, char *color_buffer)
     }
 
     return 0;
-}
+}/*}}}*/
 
 void sami_tag_ass_color(char *ass_buffer, const char *color_value)
-{
+{/*{{{*/
     // must be init 0
     char color_value_buffer[7]      = {0},
          color_rgb_buffer[7]        = {0},
@@ -446,10 +492,10 @@ void sami_tag_ass_color(char *ass_buffer, const char *color_value)
         color_rgb_number = strtol(color_rgb_buffer, NULL, 16);
         snprintf(ass_buffer, 16, "{\\r\\c&H%06X&}", color_rgb_number);
     }
-}
+}/*}}}*/
 
 void sami_tag_ass_font(char *ass_buffer, const char *face_value, const char *color_value, const char *text)
-{
+{/*{{{*/
     if(color_value != NULL){
         sami_tag_ass_color(ass_buffer, color_value);
         sprintf(ass_buffer + 15, "%s{\\r}", text);
@@ -457,10 +503,10 @@ void sami_tag_ass_font(char *ass_buffer, const char *face_value, const char *col
         // change to strcat...
         sprintf(ass_buffer, "%s", text);
     }
-}
+}/*}}}*/
 
 int sami_tag_parse_property(char *tag_property_start_po, Tag *tag_data)
-{
+{/*{{{*/
     char *property_po,
          *property_name,
          *property_name_next_po     = NULL,
@@ -505,27 +551,27 @@ int sami_tag_parse_property(char *tag_property_start_po, Tag *tag_data)
     }
 
     return ret;
-}
+}/*}}}*/
 
 int sami_tag_container_get(char *tag_po, char **tag_container, char **next_po)
-{
+{/*{{{*/
     // get all tag
     if(tagmdup(tag_po, '<', '>', tag_container, next_po) < 0){
         return -1;
     }
 
     return 0;
-}
+}/*}}}*/
 
 // return 0 : start tag => <font>
 // return 1 : end   tag => </font>
 int sami_tag_name_get(char *tag_container, char **tag_name, int *property_flag, char **next_po)
-{
+{/*{{{*/
     int tag_type;
 
     // first charecter is '/' -> end(close) tag (</font>)
     if(*tag_container == '/'){
-        if(tagstripdup(tag_container + 1, tag_name, NULL) < 0){
+        if(tagstripdup(tag_container + 1, tag_name) < 0){
             return -1;
         }
 
@@ -538,7 +584,7 @@ int sami_tag_name_get(char *tag_container, char **tag_name, int *property_flag, 
         *property_flag      = 1;
     // get tag_name "<ruby>" (not have property)
     }else{
-        if(tagstripdup(tag_container, tag_name, NULL) < 0){
+        if(tagstripdup(tag_container, tag_name) < 0){
             return -2;
         }
 
@@ -548,22 +594,22 @@ int sami_tag_name_get(char *tag_container, char **tag_name, int *property_flag, 
     }
 
     return tag_type;
-} 
+} /*}}}*/
 
 // return 0 : no end tag
 // return 1 : end tag
 int sami_tag_check(char *tag_name, char *tag_stack_pop_name)
-{
+{/*{{{*/
     // dismatch tag_push_name
     if((strcasecmp(tag_name, tag_stack_pop_name)) != 0 ){
         return -1;
     }
 
     return 1;
-}
+}/*}}}*/
 
 int sami_tag_font_property_get(Tag *tag, char **font_face_buffer, char **font_color_buffer)
-{
+{/*{{{*/
     int i,
         ret = 0;
 
@@ -581,7 +627,7 @@ int sami_tag_font_property_get(Tag *tag, char **font_face_buffer, char **font_co
     }
 
     return ret;
-}
+}/*}}}*/
 
 int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
 {
@@ -643,13 +689,12 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                         // do not free tag_name
                         tag_stack_push.name = tag_name;
 
-                        //fprintf(stderr, "(START) Stack push\n");
-                        if((tag_stack_push_index = sami_tag_stack_search(tag_stack, tag_name, &tag_stack_push, TAG_STACK_MAX)) > 0){
-                            sami_tag_stack_update(tag_stack, tag_stack_push_index, tag_stack_push);
+                        if((tag_stack_push_index = sami_tag_stack_search(tag_stack, tag_name, TAG_STACK_MAX)) >= 0){
+                            sami_tag_stack_update(tag_stack, tag_name, tag_stack_push_index, &tag_stack_push);
+
                         }else{
                             sami_tag_stack_push(tag_stack, tag_stack_push, TAG_STACK_MAX);
                         }
-                        //sami_tag_stack_print(tag_stack, TAG_STACK_MAX);
                         break;
                     case TAG_END:
                         if(sami_tag_stack_top(tag_stack, &tag_stack_top, TAG_STACK_MAX) < 0){
