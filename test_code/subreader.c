@@ -21,11 +21,13 @@ char *subtitle_line[5000][16] = {{NULL}};
 typedef struct _Tag_Property{
     char *name,
          *value;
+    int  property_allocation_flag;
 } Tag_Property;
 
 typedef struct _Tag{
     char *name;
-    int  property_count;
+    int  name_allocation_flag,
+         property_count;
 
     Tag_Property property[TAG_PROPERTY_MAX];
 } Tag;
@@ -158,15 +160,15 @@ int tagstripdup(char *string, char **strip_string)
     return strip_string_length;
 }/*}}}*/
 
-void sami_tag_stack_free(Tag *stack)
+void sami_tag_stack_free(Tag *stack_element)
 {/*{{{*/
     int i;
 
-    free(stack->name);
+    free(stack_element->name);
 
-    for(i = 0;i < stack->property_count;i ++){
-        free(stack->property[i].name);
-        free(stack->property[i].value);
+    for(i = 0;i < stack_element->property_count;i ++){
+        free(stack_element->property[i].name);
+        free(stack_element->property[i].value);
     }
 }/*}}}*/
 
@@ -186,7 +188,7 @@ void sami_tag_stack_free_all(Tag **stack, unsigned int stack_max_size)
     }
 }/*}}}*/
 
-int sami_tag_stack_top(Tag **stack, Tag **element, unsigned int stack_max_size)
+int sami_tag_stack_top(Tag **stack, Tag **stack_element, unsigned int stack_max_size)
 {
     int i;
 
@@ -208,9 +210,9 @@ int sami_tag_stack_top(Tag **stack, Tag **element, unsigned int stack_max_size)
         return -2;
     }
 
-    if(element != NULL){
-       // memcpy(element, stack[i], sizeof(Tag));
-       *element = stack[i];
+    if(stack_element != NULL){
+       // memcpy(stack_element, stack[i], sizeof(Tag));
+       *stack_element = stack[i];
     }
 
     return i;
@@ -239,32 +241,35 @@ int sami_tag_stack_search(Tag **stack, const char *tag_name, unsigned int stack_
     return i;
 }
 
-int sami_tag_stack_update(Tag **stack, char *tag_name, int stack_index, Tag *element)
+// new = new + old;
+int sami_tag_stack_combine(Tag *element_old, Tag *element_new)
 {
     int i,
         j,
         property_count,
         update_flag = 0;
 
-    if(strcasecmp(stack[stack_index]->name, tag_name) != 0){
+    if(strcasecmp(element_old->name, element_new->name) != 0){
         return -1;
     }
 
-    stack[stack_index]->name = element->name;
-
-    for(i = 0;i < element->property_count;i ++){
-        property_count = stack[stack_index]->property_count;
+    for(i = 0;i < element_old->property_count;i ++){
+        property_count = element_new->property_count;
 
         for(j = 0;j < property_count;j ++){
+            fprintf(stderr, "Test - Property Compare : '%s'('%s') '%s'('%s')\n", element_old->property[i].name, element_old->property[i].value, element_new->property[j].name, element_new->property[j].value);
 
-            fprintf(stderr, "Test - Property Compare : '%s'('%s') '%s'('%s')\n", element->property[i].name, element->property[i].value, stack[stack_index]->property[j].name, stack[stack_index]->property[j].value);
-
+            // (1) n : =  , v : =  => no run 
+            // (2) n : != , v : =  => no mean
+            // (3) n : =  , v : != => renewal
+            // (4) n ; != , v : != => no mean
+        
             // match property, update value
-            if(strcasecmp(element->property[i].name,  stack[stack_index]->property[j].name)  == 0 && \
-               strcasecmp(element->property[i].value, stack[stack_index]->property[j].value) != 0){
-                free(stack[stack_index]->property[j].value);
-                stack[stack_index]->property[j].value = element->property[i].value;
-                fprintf(stderr, "Test - Property Update  : '%s' '%s'\n", stack[stack_index]->property[j].name, stack[stack_index]->property[j].value);
+            if(strcasecmp(element_old->property[i].name,  element_new->property[j].name)  == 0 && \
+               strcasecmp(element_old->property[i].value, element_new->property[j].value) != 0){
+                free(element_new->property[j].value);
+                element_new->property[j].value = element_old->property[i].value;
+                fprintf(stderr, "Test - Property Update  : '%s' '%s'\n", element_new->property[j].name, element_new->property[j].value);
                 update_flag = 1;
             }
 
@@ -272,11 +277,12 @@ int sami_tag_stack_update(Tag **stack, char *tag_name, int stack_index, Tag *ele
         }
 
         // not exist, add property
+        // (1), (2), (3) 일경우 이 루틴이 들어와서는 안됨.
         if(update_flag == 0){
-            stack[stack_index]->property[property_count].name  = element->property[i].name;
-            stack[stack_index]->property[property_count].value = element->property[i].value;
-            fprintf(stderr, "Test - Proerty Add      : '%s' '%s'\n", stack[stack_index]->property[property_count].name, stack[stack_index]->property[property_count].value);
-            (stack[stack_index]->property_count) ++;
+            element_new->property[property_count].name  = element_old->property[i].name;
+            element_new->property[property_count].value = element_old->property[i].value;
+            fprintf(stderr, "Test - Proerty Add      : '%s' '%s'\n", elememnt_source->property[property_count].name, element_new->property[property_count].value);
+            (element_new->property_count) ++;
         }
 
         update_flag = 0;
@@ -285,7 +291,7 @@ int sami_tag_stack_update(Tag **stack, char *tag_name, int stack_index, Tag *ele
     return 0;
 }
 
-int sami_tag_stack_push(Tag **stack, Tag element, unsigned int stack_max_size)
+int sami_tag_stack_push(Tag **stack, Tag stack_element, unsigned int stack_max_size)
 {
     int stack_top;
 
@@ -295,16 +301,16 @@ int sami_tag_stack_push(Tag **stack, Tag element, unsigned int stack_max_size)
     }
 
     stack[stack_top + 1] = (Tag*)calloc(1, sizeof(Tag));
-    memcpy(stack[stack_top + 1], &element, sizeof(Tag));
+    memcpy(stack[stack_top + 1], &stack_element, sizeof(Tag));
     return 0;
 }
 
-int sami_tag_stack_top_remove(Tag **stack, Tag *element, unsigned int stack_max_size)
+int sami_tag_stack_top_remove(Tag **stack, Tag *stack_element, unsigned int stack_max_size)
 {
     int stack_top;
 
     // check underflow
-    if((stack_top = sami_tag_stack_top(stack, &element, stack_max_size)) == -1){
+    if((stack_top = sami_tag_stack_top(stack, &stack_element, stack_max_size)) == -1){
         return -1;
     }
 
@@ -507,7 +513,7 @@ void sami_tag_ass_font(char *ass_buffer, const char *face_value, const char *col
     }
 }/*}}}*/
 
-int sami_tag_parse_property(char *tag_property_start_po, Tag *tag_data)
+int sami_tag_parse_property(char *tag_property_start_po, Tag *stack_element)
 {/*{{{*/
     char *property_po,
          *property_name,
@@ -538,18 +544,18 @@ int sami_tag_parse_property(char *tag_property_start_po, Tag *tag_data)
             break;
         }
 
-        tag_data->property[property_count].name  = property_name;
-        tag_data->property[property_count].value = value;
+        stack_element->property[property_count].name  = property_name;
+        stack_element->property[property_count].value = value;
         property_count ++;
 
         property_po = property_value_next_po;
     }
 
-    tag_data->property_count = property_count;
+    stack_element->property_count = property_count;
 
     int i;
-    for(i = 0;i < tag_data->property_count;i ++){
-        fprintf(stderr, "Test - Property Loop    : '%d' '%s' '%s'\n", i, tag_data->property[i].name, tag_data->property[i].value);
+    for(i = 0;i < stack_element->property_count;i ++){
+        fprintf(stderr, "Test - Property Loop    : '%d' '%s' '%s'\n", i, stack_element->property[i].name, stack_element->property[i].value);
     }
 
     return ret;
@@ -610,7 +616,7 @@ int sami_tag_check(char *tag_name, char *tag_stack_pop_name)
     return 1;
 }/*}}}*/
 
-int sami_tag_font_property_get(Tag *tag, char **font_face_buffer, char **font_color_buffer)
+int sami_tag_font_property_get(Tag *stack_element, char **font_face_buffer, char **font_color_buffer)
 {/*{{{*/
     int i,
         ret = 0;
@@ -618,17 +624,22 @@ int sami_tag_font_property_get(Tag *tag, char **font_face_buffer, char **font_co
     *font_face_buffer  = NULL;
     *font_color_buffer = NULL;
 
-    for(i = 0;i < tag->property_count;i ++){
-        if(strcasecmp(tag->property[i].name, "face") == 0){
-            *font_face_buffer = tag->property[i].value;
+    for(i = 0;i < stack_element->property_count;i ++){
+        if(strcasecmp(tag_eleemnt->property[i].name, "face") == 0){
+            *font_face_buffer = stack_element->property[i].value;
             ret |= 1;
-        }else if(strcasecmp(tag->property[i].name, "color") == 0){
-            *font_color_buffer = tag->property[i].value;
+        }else if(strcasecmp(stack_element->property[i].name, "color") == 0){
+            *font_color_buffer = stack_element->property[i].value;
             ret |= 2;
         }
     }
 
     return ret;
+}/*}}}*/
+
+void sami_tag_name_set(Tag *stack_element, char *tag_name)
+{/*{{{*/
+    stack_element->name = tag_name;
 }/*}}}*/
 
 int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
@@ -647,36 +658,15 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
     int  tag_open_flag,
          tag_property_flag      = 0,
          tag_text_index         = 0,
-         tag_stack_push_index;
+         tag_stack_top_index;
     Tag  tag_stack_push,
          *tag_stack_top;
 
-    tag_po      = font_tag_string;
+    tag_po = font_tag_string;
 
     while(*tag_po != '\0'){
         switch(*tag_po){
             case '<':
-                fprintf(stderr, "Test - Subtitle (TEXT)  : '%s'\n", text);
-
-                if(strcmp(text, "") != 0 ){
-                    if(sami_tag_stack_top(tag_stack, &tag_stack_top, TAG_STACK_MAX) >= 0){
-                        sami_tag_font_property_get(tag_stack_top, &stack_pop_face_po, &stack_pop_color_po);
-                        sami_tag_ass_font(ass_buffer, stack_pop_face_po, stack_pop_color_po, text);
-
-                        if(sami_tag_stack_top_remove(tag_stack, tag_stack_top, TAG_STACK_MAX) < 0){
-                            fprintf(stderr, "ERROR : Stack Delete Error\n");
-                            free(tag_name);
-                            break;
-                        }
-                    }else{
-                        sprintf(ass_buffer, "%s", text);
-                    }
-
-                    strcat(ass_buffer_cat, ass_buffer);
-                    fprintf(stderr, "Test - Accure ass tag : '%s' -> '%s' next: '%s'\n", text, ass_buffer, tag_po);
-                    memset(&text, 0, sizeof(text));
-                }
-
                 if(sami_tag_container_get(tag_po, &tag_container, &tag_next_po) != 0){
                     // not close '>' tag
                     tag_po += strlen(tag_po);
@@ -699,8 +689,24 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                     break;
                 }
 
+                if(strcmp(text, "") != 0 ){/*{{{*/
+                    if(sami_tag_stack_top(tag_stack, &tag_stack_top, TAG_STACK_MAX) >= 0){
+                        sami_tag_font_property_get(tag_stack_top, &stack_pop_face_po, &stack_pop_color_po);
+                        sami_tag_ass_font(ass_buffer, stack_pop_face_po, stack_pop_color_po, text);
+                    }else{
+                        sprintf(ass_buffer, "%s", text);
+                    }
+
+                    strcat(ass_buffer_cat, ass_buffer);
+                    fprintf(stderr, "Test - Accure ass tag : '%s' -> '%s' next: '%s'\n", text, ass_buffer, tag_po);
+                    memset(&text, 0, sizeof(text));
+                }/*}}}*/
+
                 switch(tag_open_flag){
                     case TAG_START:
+                        // do not free tag_name (only tag start)
+                        sami_tag_name_set(&tag_stack_push, tag_name);
+
                         if(tag_property_flag == 1){
                             if(sami_tag_parse_property(tag_property_start_po, &tag_stack_push) < 0){
                                 free(tag_name);
@@ -709,15 +715,11 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                             }
                         }
 
-                        // do not free tag_name
-                        tag_stack_push.name = tag_name;
-
-                        if((tag_stack_push_index = sami_tag_stack_search(tag_stack, tag_name, TAG_STACK_MAX)) >= 0){
-                            sami_tag_stack_update(tag_stack, tag_name, tag_stack_push_index, &tag_stack_push);
-                        }else{
-                            sami_tag_stack_push(tag_stack, tag_stack_push, TAG_STACK_MAX);
+                        if((tag_stack_top_index = sami_tag_stack_search(tag_stack, tag_name, TAG_STACK_MAX)) >= 0){
+                            sami_tag_stack_combine(tag_stack[tag_stack_top_index], &tag_stack_push);
                         }
 
+                        sami_tag_stack_push(tag_stack, tag_stack_push, TAG_STACK_MAX);
                         sami_tag_stack_print(tag_stack, TAG_STACK_MAX);
                         break;
                     case TAG_END:
