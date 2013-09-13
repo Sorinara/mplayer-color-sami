@@ -241,51 +241,64 @@ int sami_tag_stack_search(Tag **stack, const char *tag_name, unsigned int stack_
     return i;
 }
 
-// new = new + old;
-int sami_tag_stack_combine(Tag *element_old, Tag *element_new)
+int sami_tag_property_search(Tag_Property *stack_element_property, Tag_Property **new_element_property, int new_element_property_count)
 {
     int i,
-        j,
-        property_count,
-        update_flag = 0;
+        name_match_flag     = 0,
+        value_change_flag   = 0,
+        ret                 = -1;
 
-    if(strcasecmp(element_old->name, element_new->name) != 0){
+    for(i = 0;i < new_element_property_count;i ++){
+        // (1) n : =  , v : =  => no run 
+        // (2) n : != , v : =  => no mean
+        // (3) n : =  , v : != => renewal
+        // (4) n ; != , v : != => no mean
+        fprintf(stderr, "Test - Property Compare : '%s'('%s') '%s'('%s')\n", stack_element_property->name, stack_element_property->value, new_element_property[i]->name, new_element_property[i]->value);
+
+        // (1) or (3) match property, update value
+        if(strcasecmp(stack_element_property->name,  new_element_property[i].name)  == 0){
+            // (3)
+            if(strcasecmp(stack_element_property->value, new_element_property[i].value) != 0){
+                free(new_element_property[i].value);
+                new_element_property[i].value = stack_element_property->value;
+                fprintf(stderr, "Test - Property Update  : '%s' '%s'\n", new_element_property[i].name, new_element_property[i].value);
+                value_change_flag = 1;
+            }
+            // (1) or (3)
+            name_match_flag = 1;
+            ret             = i;
+            break;        
+        }
+        fprintf(stderr, "Test - Property Compare : END\n");
+    }
+
+    if(name_match_flag == 0 && value_change_flag == 0){
+        return -2;
+    }
+
+    return ret;
+}
+
+// new = new + old;
+int sami_tag_stack_combine(Tag *stack_element, Tag *element_new)
+{
+    int i,
+        property_count;
+
+    if(strcasecmp(stack_element->name, element_new->name) != 0){
         return -1;
     }
 
-    for(i = 0;i < element_old->property_count;i ++){
-        property_count = element_new->property_count;
+    for(i = 0;i < stack_element->property_count;i ++){
 
-        for(j = 0;j < property_count;j ++){
-            fprintf(stderr, "Test - Property Compare : '%s'('%s') '%s'('%s')\n", element_old->property[i].name, element_old->property[i].value, element_new->property[j].name, element_new->property[j].value);
-
-            // (1) n : =  , v : =  => no run 
-            // (2) n : != , v : =  => no mean
-            // (3) n : =  , v : != => renewal
-            // (4) n ; != , v : != => no mean
-        
-            // match property, update value
-            if(strcasecmp(element_old->property[i].name,  element_new->property[j].name)  == 0 && \
-               strcasecmp(element_old->property[i].value, element_new->property[j].value) != 0){
-                free(element_new->property[j].value);
-                element_new->property[j].value = element_old->property[i].value;
-                fprintf(stderr, "Test - Property Update  : '%s' '%s'\n", element_new->property[j].name, element_new->property[j].value);
-                update_flag = 1;
-            }
-
-            fprintf(stderr, "Test - Property Compare : END\n");
-        }
-
-        // not exist, add property
-        // (1), (2), (3) 일경우 이 루틴이 들어와서는 안됨.
-        if(update_flag == 0){
-            element_new->property[property_count].name  = element_old->property[i].name;
-            element_new->property[property_count].value = element_old->property[i].value;
+        // 속성이름과 일치하는것이 없을때에는 새로운 속성 배열에다가 추가(+1)
+        // warnning! : 오버플로우 검사 안한다!
+        if(sami_tag_property_search(stack_element->property[i], element_new->property, stack_element->property_count) < 0){
+            element_new->property[property_count].name  = stack_element->property[i].name;
+            element_new->property[property_count].value = stack_element->property[i].value;
             fprintf(stderr, "Test - Proerty Add      : '%s' '%s'\n", elememnt_source->property[property_count].name, element_new->property[property_count].value);
             (element_new->property_count) ++;
         }
-
-        update_flag = 0;
     }
 
     return 0;
