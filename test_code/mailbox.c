@@ -26,21 +26,28 @@ typedef struct _Pr{
 
 int MailBox_Check(char *name, Property *property_array, int property_count)
 {
-    int i;
+    int i,
+        flag = 0;
 
     for(i = 0;i < property_count;i++){
         if(strcmp(name, property_array[i].name) == 0){
-            return 1;
+            flag = 1;
+            break;
         }
     }
 
-    return 0;
+    if(flag == 0){
+       return -1; 
+    }
+    
+    return i;
 }
 
 int main(int argc, const char *argv[])
 {
     int i,
         j,
+        mailbox_i,
         name_flag   = 0,
         value_flag  = 0,
         new_counter = 0;
@@ -63,35 +70,44 @@ int main(int argc, const char *argv[])
 
     for(i = 0;i < 3;i++){
         for(j = 0;j <3;j++){
-            printf("'%s(%s)' '%s(%s)'\n", property_array_a[i].name, property_array_a[i].value, property_array_b[j].name, property_array_b[j].value);
-            
+            name_flag = 0;
+            fprintf(stderr, "'%s(%s)' '%s(%s)'\n", property_array_a[i].name, property_array_a[i].value, property_array_b[j].name, property_array_b[j].value);
+
             if(strcmp(property_array_a[i].name, property_array_b[j].name) == 0){
                 if(strcmp(property_array_a[i].value, property_array_b[j].value) != 0){
-                    if(MailBox_Check(property_array_b[j].name, property_array_new, 3) == 0){
+                    fprintf(stderr, "[%s] DEBUG LINE '%s' - (%s, Line:%d)\n", __TIME__, "Match in", __FILE__, __LINE__);
+                    mailbox_i = MailBox_Check(property_array_b[j].name, property_array_new, new_counter);
+
+                    if( mailbox_i < 0){
                         property_array_new[new_counter].name  = property_array_b[j].name;
                         property_array_new[new_counter].value = property_array_b[j].value;
                         new_counter ++;
-                        printf("in 1\n");
-                        value_flag = 1; 
+                    }else{
+                        property_array_new[mailbox_i].value = property_array_b[j].value;
                     }
+
+                    value_flag = 1; 
                 }
                name_flag = 1; 
             }
            
             if(name_flag == 0){
-                if(MailBox_Check(property_array_a[i].name, property_array_new, 3) == 0){
-                    property_array_new[new_counter].name  = property_array_a[i].name; 
-                    property_array_new[new_counter].value = property_array_a[i].value; 
-                    printf("in 2\n");
+                mailbox_i = MailBox_Check(property_array_a[i].name, property_array_new, new_counter);
+                fprintf(stderr, "[%s] DEBUG LINE '%s' - (%s, Line:%d)\n", __TIME__, "Not Match Add", __FILE__, __LINE__);
+
+                if( mailbox_i < 0){
+                    property_array_new[new_counter].name  = property_array_b[j].name; 
+                    property_array_new[new_counter].value = property_array_b[j].value; 
                     new_counter ++;
+                }else{
+                    property_array_new[mailbox_i].value = property_array_b[j].value;
                 }
             }
-
-            name_flag = 0;
         }
     }
     
     for(i = 0;i < new_counter;i++){
+        fprintf(stderr, "[%s] DEBUG LINE '%s' - (%s, Line:%d)\n", __TIME__, "Data", __FILE__, __LINE__);
         printf("Data (%d): '%s' '%s'\n", new_counter, property_array_new[i].name, property_array_new[i].value);
     }
     
