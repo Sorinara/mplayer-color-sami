@@ -218,7 +218,7 @@ int sami_tag_stack_top(Tag **stack, Tag **stack_element, unsigned int stack_max_
     return i;
 }
 
-int sami_tag_stack_search(Tag **stack, const char *tag_name, unsigned int stack_max_size) 
+int sami_tag_stack_name_search(Tag **stack, const char *tag_name, unsigned int stack_max_size) 
 {
     int i,
         match_flag = 0;
@@ -241,7 +241,7 @@ int sami_tag_stack_search(Tag **stack, const char *tag_name, unsigned int stack_
     return i;
 }
 
-int sami_tag_property_combine(Tag_Property stack_element_property, Tag_Property *new_element_property, int new_element_property_count)
+int sami_tag_stack_property_update(Tag_Property stack_element_property, Tag_Property *new_element_property, int new_element_property_count)
 {
     int i,
         name_match_flag     = 0,
@@ -280,7 +280,7 @@ int sami_tag_property_combine(Tag_Property stack_element_property, Tag_Property 
 }
 
 // new = new + old;
-int sami_tag_stack_combine(Tag *stack_element, Tag *element_new, Tag *element_comibine)
+int sami_tag_stack_property_combine(Tag *stack_element, Tag *element_new, Tag *element_comibine)
 {
     int i,
         property_count;
@@ -293,7 +293,7 @@ int sami_tag_stack_combine(Tag *stack_element, Tag *element_new, Tag *element_co
     for(i = 0;i < stack_element->property_count;i ++){
         // 속성이름과 일치하는것이 없을때에는 새로운 속성 배열에다가 추가(+1)
         // warnning! : 오버플로우 검사 안한다!
-        if(sami_tag_property_combine(stack_element->property[i], element_new->property, element_new->property_count) < 0){
+        if(sami_tag_stack_property_update(stack_element->property[i], element_new->property, element_new->property_count) < 0){
             element_new->property[property_count].name  = stack_element->property[i].name;
             element_new->property[property_count].value = stack_element->property[i].value;
             fprintf(stderr, "Test - Proerty Add      : '%s' '%s'\n", element_new->property[property_count].name, element_new->property[property_count].value);
@@ -528,7 +528,7 @@ void sami_tag_ass_font(char *ass_buffer, const char *face_value, const char *col
     }
 }/*}}}*/
 
-int sami_tag_parse_property(char *tag_property_start_po, Tag *stack_element)
+int sami_tag_property_set(char *tag_property_start_po, Tag *stack_element)
 {/*{{{*/
     char *property_po,
          *property_name,
@@ -724,15 +724,15 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                         sami_tag_name_set(&tag_stack_element_now, tag_name);
 
                         if(tag_property_flag == 1){
-                            if(sami_tag_parse_property(tag_property_start_po, &tag_stack_element_now) < 0){
+                            if(sami_tag_property_set(tag_property_start_po, &tag_stack_element_now) < 0){
                                 free(tag_name);
                                 fprintf(stderr, "ERROR : Tag Property\n");
                                 break;
                             }
                         }
 
-                        if((tag_stack_top_index = sami_tag_stack_search(tag_stack, tag_name, TAG_STACK_MAX)) >= 0){
-                            sami_tag_stack_combine(tag_stack[tag_stack_top_index], &tag_stack_element_now, &tag_stack_element_push);
+                        if((tag_stack_top_index = sami_tag_stack_name_search(tag_stack, tag_name, TAG_STACK_MAX)) >= 0){
+                            sami_tag_stack_property_combine(tag_stack[tag_stack_top_index], &tag_stack_element_now, &tag_stack_element_push);
                         }else{
                             tag_stack_element_push = tag_stack_element_now;
                         }
