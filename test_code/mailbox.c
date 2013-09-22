@@ -21,56 +21,69 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define TAG_PROPERTY_MAX    256
+
 typedef struct _Pr{
     char *name,
          *value;
-} Property;
+} Tag_Property;
 
-int Property_Check(Property *property, char *name)
+typedef struct _Tag{
+    char *name;
+    int  property_count;
+
+    Tag_Property property[TAG_PROPERTY_MAX];
+} Tag;
+
+int Tag_Property_Check(Tag *tag_source,char *name, int *stack_top)
 {
     int i,
         flag = 0;
 
-    for(i = 0;property[i].name != NULL;i ++){
-        if(strcasecmp(name, property[i].name) == 0){
+    for(i = 0;i < tag_source->property_count;i ++){
+        if(strcasecmp(tag_source->property[i].name, name) == 0){
             flag = 1;
             break;
         }
     }
 
     if(flag == 0){
-       return -1; 
+        i = *stack_top;
+        (*stack_top) ++;
     }
-    
+
     return i;
 }
 
-int Property_Update(Property *mailbox_source, Property *mailbox_new, int *mailbox_new_counter)
+int Tag_Property_Update(Tag *tag_source, Tag *tag_target, Tag *tag_new)
 {
     int i,
-        mailbox_i;
+        new_tag_i,
+        new_tag_stack_top = 0;
 
-    for(i = 0;mailbox_source[i].name != NULL;i++){
-        //fprintf(stderr, "[%s] DEBUG LINE '(%d)%s' - (%s, Line:%d)\n", __TIME__, i, mailbox_source[i].name, __FILE__, __LINE__);
-        
-        // new
-        if((mailbox_i = Property_Check(mailbox_new, mailbox_source[i].name)) < 0){
-            mailbox_new[(*mailbox_new_counter)].name  = mailbox_source[i].name;
-            mailbox_new[(*mailbox_new_counter)].value = mailbox_source[i].value;
-            (*mailbox_new_counter) ++;
-        // overwrite
-        }else{
-            mailbox_new[mailbox_i].value = mailbox_source[i].value;
-        }
+    if(strcasecmp(tag_source->name, tag_target->name) != 0){
+        return -1;
     }
 
-    return *mailbox_new_counter;
+    new_tag_stack_top = tag_source->property_count;
+    memcpy(tag_new->property, tag_source->property, new_tag_stack_top * sizeof(Tag_Property));
+
+    for(i = 0;i < tag_target->property_count;i++){
+        // if match in tag_target->property[i].name, return matched index
+        // not, return to new_tag_stack_top (and ++, for future)
+        new_tag_i = Tag_Property_Check(tag_source, tag_target->property[i].name, &new_tag_stack_top);
+        //fprintf(stderr, "[%s] DEBUG LINE (%d) '%s' : %s (%s, Line:%d)\n", __TIME__, new_tag_i, tag_target->property[i].name, tag_target->property[i].value, __FILE__, __LINE__);
+        tag_new->property[new_tag_i].name  = tag_target->property[i].name;
+        tag_new->property[new_tag_i].value = tag_target->property[i].value;
+    }
+
+    tag_new->property_count = new_tag_stack_top;
+    return 0;
 }
 
 int main(int argc, const char *argv[])
 {
-    int i,
-        mailbox_new_max = 0;
+    int i;
     char *dong_a[][2]  = {{"mangpo",        "0"},
                           {"youngtong",     "1"},
                           {"shin",          "2"},
@@ -85,26 +98,52 @@ int main(int argc, const char *argv[])
                           {"shin",          "14"},
                           {"maekyo",        "15"},
                           {NULL,            NULL}};
-    Property mailbox_a[30],
-             mailbox_b[30],
-             mailbox_new[30] = {{NULL, NULL}};
+    Tag *tag_font_a     = NULL,
+        *tag_font_b     = NULL,
+        *tag_font_new   = NULL;
+    
+    if((tag_font_a = malloc(sizeof(Tag))) == NULL) {
+        fprintf(stderr, "\ndynamic memory allocation failed\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if((tag_font_b = malloc(sizeof(Tag))) == NULL) {
+        fprintf(stderr, "\ndynamic memory allocation failed\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if((tag_font_new = malloc(sizeof(Tag))) == NULL) {
+        fprintf(stderr, "\ndynamic memory allocation failed\n");
+        exit(EXIT_FAILURE);
+    }
 
     for(i = 0;i < 7;i++){
-        mailbox_a[i].name  = dong_a[i][0];
-        mailbox_a[i].value = dong_a[i][1];
-        mailbox_b[i].name  = dong_b[i][0];
-        mailbox_b[i].value = dong_b[i][1];
+        tag_font_a->property[i].name  = dong_a[i][0];
+        tag_font_a->property[i].value = dong_a[i][1];
+        tag_font_b->property[i].name  = dong_b[i][0];
+        tag_font_b->property[i].value = dong_b[i][1];
     }
 
-    //mailbox_new_max = Property_Update(mailbox_a, mailbox_new, &mailbox_new_max);
-    memcpy(mailbox_new, mailbox_a, sizeof(mailbox_a));
-    mailbox_new_max = 7;
-    mailbox_new_max = Property_Update(mailbox_b, mailbox_new, &mailbox_new_max);
+    tag_font_a->name = "font";
+    tag_font_a->property_count = 6;
+    tag_font_b->name = "font";
+    tag_font_b->property_count = 6;
 
-    for(i = 0;i < mailbox_new_max;i++){
-        fprintf(stderr, "[%s] DEBUG LINE '%s' - (%s, Line:%d)\n", __TIME__, "Data", __FILE__, __LINE__);
-        printf("Data (%d): '%s' '%s'\n", mailbox_new_max, mailbox_new[i].name, mailbox_new[i].value);
+    Tag_Property_Update(tag_font_a, tag_font_b, tag_font_new);
+
+    for(i = 0;i < tag_font_new->property_count;i++){
+        //fprintf(stderr, "[%s] DEBUG LINE '%s' - (%s, Line:%d)\n", __TIME__, "Data", __FILE__, __LINE__);
+        printf("Data (%d): '%s' '%s'\n", i, tag_font_new->property[i].name, tag_font_new->property[i].value);
     }
     
+    free(tag_font_a);
+    tag_font_a = NULL;
+
+    free(tag_font_b);
+    tag_font_b = NULL;
+
+    free(tag_font_new);
+    tag_font_new = NULL;
+
     return 0;
 }
