@@ -35,7 +35,7 @@ typedef struct _Tag{
     Tag_Property property[TAG_PROPERTY_MAX];
 } Tag;
 
-int Tag_Property_Check(Tag *tag_source,char *name, int *stack_top)
+int sami_tag_stack_property_check(Tag *tag_source,char *name, int *stack_top)
 {
     int i,
         flag = 0;
@@ -55,7 +55,7 @@ int Tag_Property_Check(Tag *tag_source,char *name, int *stack_top)
     return i;
 }
 
-int Tag_Property_Update(Tag *tag_source, Tag *tag_target, Tag *tag_new)
+int sami_tag_stack_property_combine(Tag *tag_source, Tag *tag_target, Tag *tag_new)
 {
     int i,
         new_tag_i,
@@ -71,7 +71,7 @@ int Tag_Property_Update(Tag *tag_source, Tag *tag_target, Tag *tag_new)
     for(i = 0;i < tag_target->property_count;i++){
         // if match in tag_target->property[i].name, return matched index
         // not, return to new_tag_stack_top (and ++, for future)
-        new_tag_i = Tag_Property_Check(tag_source, tag_target->property[i].name, &new_tag_stack_top);
+        new_tag_i = sami_tag_stack_property_check(tag_source, tag_target->property[i].name, &new_tag_stack_top);
         //fprintf(stderr, "[%s] DEBUG LINE (%d) '%s' : %s (%s, Line:%d)\n", __TIME__, new_tag_i, tag_target->property[i].name, tag_target->property[i].value, __FILE__, __LINE__);
         tag_new->property[new_tag_i].name  = tag_target->property[i].name;
         tag_new->property[new_tag_i].value = tag_target->property[i].value;
@@ -129,7 +129,7 @@ int main(int argc, const char *argv[])
     tag_font_b->name = "font";
     tag_font_b->property_count = 6;
 
-    Tag_Property_Update(tag_font_a, tag_font_b, tag_font_new);
+    sami_tag_stack_property_combine(tag_font_a, tag_font_b, tag_font_new);
 
     for(i = 0;i < tag_font_new->property_count;i++){
         //fprintf(stderr, "[%s] DEBUG LINE '%s' - (%s, Line:%d)\n", __TIME__, "Data", __FILE__, __LINE__);
