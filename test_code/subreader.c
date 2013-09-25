@@ -165,7 +165,7 @@ void sami_tag_stack_free(Tag *stack_element, int free_flag)
 {/*{{{*/
     int i;
 
-    //fprintf(stderr, "[%s] DEBUG LINE Tag Name '%d/%d' - (%s, Line:%d)\n", __TIME__, stack_element->name_allocation, free_flag, __FILE__, __LINE__);
+    //fprintf(stderr, "[%s][%s(%d)] Tag Name '%d/%d'\n", __TIME__, __FILE__, __LINE__, stack_element->name_allocation, free_flag);
     if(free_flag == 1 || stack_element->name_allocation == 1){
         free(stack_element->name);
     }
@@ -173,7 +173,7 @@ void sami_tag_stack_free(Tag *stack_element, int free_flag)
     stack_element->name = NULL;
 
     for(i = 0;i < stack_element->property_count;i ++){
-        //fprintf(stderr, "[%s] DEBUG LINE Property '%d/%d' - (%s, Line:%d)\n", __TIME__, i, stack_element->name_allocation, __FILE__, __LINE__);
+        //fprintf(stderr, "[%s][%s(%d)] Property '%d/%d'\n", __TIME__, __FILE__, __LINE__, i, stack_element->name_allocation);
         if(free_flag == 1 || stack_element->property[i].name_allocation== 1){
             free(stack_element->property[i].name);
         }
@@ -206,7 +206,7 @@ void sami_tag_stack_free_all(Tag **stack, unsigned int stack_max_size)
 }/*}}}*/
 
 int sami_tag_stack_top_get(Tag **stack, Tag **stack_element, unsigned int stack_max_size)
-{
+{/*{{{*/
     int i;
 
     for(i = 0;i < stack_max_size;i ++){
@@ -233,10 +233,10 @@ int sami_tag_stack_top_get(Tag **stack, Tag **stack_element, unsigned int stack_
     }
 
     return i;
-}
+}/*}}}*/
 
 int sami_tag_stack_name_search(Tag **stack, const char *tag_name, unsigned int stack_max_size) 
-{
+{/*{{{*/
     int i,
         match_index = -1,
         match_flag  = 0;
@@ -258,10 +258,10 @@ int sami_tag_stack_name_search(Tag **stack, const char *tag_name, unsigned int s
     }
 
     return match_index;
-}
+}/*}}}*/
 
 int sami_tag_stack_element_combine_property_check(Tag *tag_source, char *target_tag_name, int *stack_top, int *stack_index_match)
-{
+{/*{{{*/
     int property_index,
         property_match_flag = 0;
 
@@ -283,10 +283,10 @@ int sami_tag_stack_element_combine_property_check(Tag *tag_source, char *target_
     }
 
     return property_match_flag;
-}
+}/*}}}*/
 
 int sami_tag_stack_element_combine(Tag *tag_source, Tag *tag_target, Tag *tag_new)
-{
+{/*{{{*/
     int i,
         new_tag_index,
         new_tag_stack_top = 0;
@@ -318,18 +318,17 @@ int sami_tag_stack_element_combine(Tag *tag_source, Tag *tag_target, Tag *tag_ne
                 tag_new->property[new_tag_index].value              = tag_target->property[i].value;
                 break;
         }
-        //fprintf(stderr, "[%s] DEBUG LINE (%d) '%s' : %s (%s, Line:%d)\n", __TIME__, new_tag_index, tag_target->property[i].name, tag_target->property[i].value, __FILE__, __LINE__);
+        //fprintf(stderr, "[%s][%s(%d)] (%d) '%s' : %s\n", __TIME__, __FILE__, __LINE__, new_tag_index, tag_target->property[i].name, tag_target->property[i].value);
     }
 
     tag_new->property_count     = new_tag_stack_top;
     tag_new->name               = tag_source->name;
     tag_new->name_allocation    = 0;
     return 0;
-}
-
+}/*}}}*/
 
 int sami_tag_stack_push(Tag **stack, Tag stack_element, unsigned int stack_max_size)
-{
+{/*{{{*/
     int stack_top;
 
     // check overflow
@@ -340,10 +339,10 @@ int sami_tag_stack_push(Tag **stack, Tag stack_element, unsigned int stack_max_s
     stack[stack_top + 1] = (Tag*)calloc(1, sizeof(Tag));
     memcpy(stack[stack_top + 1], &stack_element, sizeof(Tag));
     return 0;
-}
+}/*}}}*/
 
 int sami_tag_stack_top_remove(Tag **stack, Tag *stack_element, unsigned int stack_max_size)
-{
+{/*{{{*/
     int stack_top;
 
     // check underflow
@@ -356,7 +355,7 @@ int sami_tag_stack_top_remove(Tag **stack, Tag *stack_element, unsigned int stac
     stack[stack_top] = NULL;
 
     return 0;
-}
+}/*}}}*/
 
 int sami_tag_property_name_get(char *string, char **property_name_strip, char **next)
 {/*{{{*/
@@ -378,18 +377,18 @@ int sami_tag_property_name_get(char *string, char **property_name_strip, char **
 
     *next = property_name_end_po;
 
-    //fprintf(stderr, "Test - Property Name : '%s' '%s' '%s'\n", string, *property_name_strip, *next);
+    //fprintf(stderr, "[%s][%s(%d)] '%s' : '%s' '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "Test - Property Name : ", string, *property_name_strip, *next);
     free(property_name);
     return 0;
 }/*}}}*/
 
 void sami_tag_stack_print(Tag **stack, unsigned int stack_max_size)
-{
+{/*{{{*/
     int i,
         j;
 
     if(stack[0] == NULL){
-        fprintf(stderr, "Stack Empty\n");
+        fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "Stack Empty");
         return;
     }
 
@@ -398,18 +397,17 @@ void sami_tag_stack_print(Tag **stack, unsigned int stack_max_size)
             break;
         }
 
-        // stack[i]에서 변수를 참조하는게 에러?!
-        fprintf(stderr, "STACK(%d) DATA: '%s'\n", i, stack[i]->name);
+        fprintf(stderr, "[%s][%s(%d)] %s (%d) : '%s'\n", __TIME__, __FILE__, __LINE__, "Stack DATA         ", i, stack[i]->name);
 
         for(j = 0;j < stack[i]->property_count;j ++){
-            fprintf(stderr, "-Property(%d/%d): %s [%s]\n", j, stack[i]->property_count, stack[i]->property[j].name, stack[i]->property[j].value);
+            fprintf(stderr, "[%s][%s(%d)] %s (%d/%d)         : { [%s] = '%s' }\n", __TIME__, __FILE__, __LINE__, "-Property", j, stack[i]->property_count, stack[i]->property[j].name, stack[i]->property[j].value);
         }
     }
 
     if(i + 1 == stack_max_size){
-        fprintf(stderr, "Stack Full\n");
+        fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "Stack Full");
     }
-}
+}/*}}}*/
 
 int sami_tag_property_value_get(char *string, char **value, char **next_po)
 {/*{{{*/
@@ -465,7 +463,7 @@ int sami_tag_property_value_get(char *string, char **value, char **next_po)
 
     value_length = end_po - start_po;
     *value       = strndup(start_po, value_length);
-    //fprintf(stderr, "Test - Property Value : '%s' '%s' '%s' %d -> '%s'\n", string, start_po, end_po, value_length, *value);
+    //fprintf(stderr, "[%s][%s(%d)]  '%s' '%s' '%s' '%s' %d -> '%s'\n", __TIME__, __FILE__, __LINE__, "Test - Property Value : ", string, start_po, end_po, value_length, *value);
     return 0;
 }/*}}}*/
 
@@ -592,10 +590,11 @@ int sami_tag_property_set(char *tag_property_start_po, Tag *stack_element)
 
     stack_element->property_count = property_count;
     
+    /*
     int i;
     for(i = 0;i < stack_element->property_count;i ++){
-        fprintf(stderr, "Test - Property Loop    : '%d' '%s' '%s'\n", i, stack_element->property[i].name, stack_element->property[i].value);
-    }
+        fprintf(stderr, "[%s][%s(%d)] %s '%d' '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "Test - Property Loop    :", i, stack_element->property[i].name, stack_element->property[i].value);
+    }  */
     return ret;
 }/*}}}*/
 
@@ -642,6 +641,19 @@ int sami_tag_name_get(char *tag_container, char **tag_name, int *property_flag, 
     return tag_type;
 } /*}}}*/
 
+int sami_tag_name_set(char *tag_container, Tag *tag_stack_element, int *property_flag, char **next_po)
+{/*{{{*/
+    int tag_type;
+
+    if((tag_type = sami_tag_name_get(tag_container, &(tag_stack_element->name), property_flag, next_po)) < 0){
+        return -1;
+    }
+
+    tag_stack_element->name_allocation = 1;
+
+    return tag_type;
+}/*}}}*/
+
 // return 0 : no end tag
 // return 1 : end tag
 int sami_tag_check(char *tag_name, char *tag_stack_pop_name)
@@ -675,19 +687,12 @@ int sami_tag_font_property_get(Tag *stack_element, char **font_face_buffer, char
     return ret;
 }/*}}}*/
 
-void sami_tag_name_set(Tag *stack_element, char *tag_name)
-{/*{{{*/
-    stack_element->name             = tag_name;
-    stack_element->name_allocation  = 1;
-}/*}}}*/
-
 int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
 {
     // ass buffer는 초기화 되어야 함.
     char *tag_po,
          *tag_container,
          *tag_next_po,
-         *tag_name,
          *tag_property_start_po,
          *stack_pop_face_po,
          *stack_pop_color_po,
@@ -710,21 +715,21 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                 if(sami_tag_container_get(tag_po, &tag_container, &tag_next_po) != 0){
                     // not exist close tag (unable search '>')
                     tag_po += strlen(tag_po);
-                    fprintf(stderr, "ERROR : Tag '%s'\n", tag_po);
+                    fprintf(stderr, "[%s][%s(%d)] '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Tag", tag_po);
                     break;
                 }
 
-                if((tag_type = sami_tag_name_get(tag_container, &tag_name, &tag_property_flag, &tag_property_start_po)) < 0){
-                    fprintf(stderr, "ERROR : not have tag name, ignore\n");
+                if((tag_type = sami_tag_name_set(tag_container, &tag_stack_element_now, &tag_property_flag, &tag_property_start_po)) < 0){
+                    fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : not have tag name, ignore");
                     tag_po = tag_next_po;
                     free(tag_container);
                     break;
                 }
 
                 // if not <font>(</font>) -> ignore
-                if(strcasecmp(tag_name, "font") != 0){
+                if(strcasecmp(tag_stack_element_now.name, "font") != 0){
                     tag_po = tag_next_po;
-                    free(tag_name);
+                    free(tag_stack_element_now.name);
                     free(tag_container);
                     break;
                 }
@@ -732,24 +737,24 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                 // if exist text
                 if(strcmp(text, "") != 0){
                     if(sami_tag_stack_top_get(tag_stack, &tag_stack_top, TAG_STACK_MAX) < 0){
-                        fprintf(stderr, "ERROR : Under flow or Over flow\n");
-                        free(tag_name);
+                        fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__,  __FILE__, __LINE__, "ERROR : Under flow or Over flow");
+                        free(tag_stack_element_now.name);
                         break;
                     }
 
                     //바로 이전태그의 시작과 지금태그의 끝이 같아야 함.
-                    if(sami_tag_check(tag_name, tag_stack_top->name) < 0){
-                        fprintf(stderr, "ERROR : Not match open/close tag name : '%s' '%s'\n", tag_name, tag_stack_top->name);
-                        free(tag_name);
+                    if(sami_tag_check(tag_stack_element_now.name, tag_stack_top->name) < 0){
+                        fprintf(stderr, "[%s][%s(%d)] '%s' '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Not match open/close tag name :", tag_stack_element_now.name, tag_stack_top->name);
+                        free(tag_stack_element_now.name);
                         break;
                     }
 
                     // color 정보만 가져옴 (rt, face는 아직...)  동적할당이 아니라, tag_stack에서 pop에서 할당된 주소만 가지고 온다.
                     sami_tag_font_property_get(tag_stack_top, &stack_pop_face_po, &stack_pop_color_po);
-                    fprintf(stderr, "Test - Font Tag Result  : '%s' '%s' \n", stack_pop_face_po, stack_pop_color_po);
+                    fprintf(stderr, "[%s][%s(%d)] %s '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "Test - Font Tag Result  :", stack_pop_face_po, stack_pop_color_po);
                     sami_tag_ass_font(ass_buffer, stack_pop_face_po, stack_pop_color_po, text);
                     strcat(ass_buffer_cat, ass_buffer);
-                    fprintf(stderr, "Test - Ass  Tag Result  : '%s' -> '%s' (Ac: '%s')\n", text, ass_buffer, ass_buffer_cat);
+                    fprintf(stderr, "[%s][%s(%d)] %s '%s' -> '%s' (Ac: '%s')\n", __TIME__, __FILE__, __LINE__, "Test - Ass  Tag Result  :", text, ass_buffer, ass_buffer_cat);
 
                     memset(&text, 0, sizeof(text));
                     tag_text_index  = 0;
@@ -757,42 +762,39 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
 
                 switch(tag_type){
                     case TAG_START:
-                        // do not free tag_name (insert tag_stack_element_now->name)
-                        sami_tag_name_set(&tag_stack_element_now, tag_name);
-
                         if(tag_property_flag == 1){
                             if(sami_tag_property_set(tag_property_start_po, &tag_stack_element_now) < 0){
-                                free(tag_name);
-                                fprintf(stderr, "ERROR : Tag Property\n");
+                                free(tag_stack_element_now.name);
+                                fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Tag Property");
                                 break;
                             }
                         }
 
-                        if((tag_stack_top_index = sami_tag_stack_name_search(tag_stack, tag_name, TAG_STACK_MAX)) >= 0){
+                        if((tag_stack_top_index = sami_tag_stack_name_search(tag_stack, tag_stack_element_now.name, TAG_STACK_MAX)) >= 0){
                             sami_tag_stack_element_combine(tag_stack[tag_stack_top_index], &tag_stack_element_now, &tag_stack_element_push);
                         }else{
                             tag_stack_element_push = tag_stack_element_now;
                         }
 
                         sami_tag_stack_push(tag_stack, tag_stack_element_push, TAG_STACK_MAX);
-                        fprintf(stderr, "[%s] DEBUG LINE '%s' (%d) - (%s, Line:%d)\n", __TIME__, "Push OK, Stack Status", tag_stack_top_index, __FILE__, __LINE__);
+                        fprintf(stderr, "[%s][%s(%d)] %s (%d)\n", __TIME__, __FILE__, __LINE__, "Push OK, Stack Status   :", tag_stack_top_index);
                         sami_tag_stack_print(tag_stack, TAG_STACK_MAX);
                         break;
                     case TAG_END:
                         if(sami_tag_stack_top_remove(tag_stack, tag_stack_top, TAG_STACK_MAX) < 0){
-                            fprintf(stderr, "ERROR : Stack Delete Error\n");
-                            free(tag_name);
+                            fprintf(stderr, "[%s][%s(%d)] %s\n", __TIME__, __FILE__, __LINE__, "ERROR : Stack Delete Error");
+                            free(tag_stack_element_now.name);
                             break;
                         }
 
-                        fprintf(stderr, "[%s] DEBUG LINE '%s' (%d) - (%s, Line:%d)\n", __TIME__, "Pop  OK, Stack Status", tag_stack_top_index, __FILE__, __LINE__);
+                        fprintf(stderr, "[%s][%s(%d)] %s (%d)\n", __TIME__, __FILE__, __LINE__, "Pop  OK, Stack Status   :", tag_stack_top_index);
                         sami_tag_stack_print(tag_stack, TAG_STACK_MAX);
-                        free(tag_name);
+                        free(tag_stack_element_now.name);
                         break;
                 }
 
                 // do not move free position "tag_container"
-                // do not free tag_name (if push, use stack)
+                // do not free tag_stack_element_now.name (if push, use stack)
                 free(tag_container);
                 tag_po = tag_next_po;
                 break;
@@ -813,7 +815,7 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
         }
 
         strcat(ass_buffer_cat, ass_buffer);
-        //fprintf(stderr, "Test - Accure ass tag : '%s' -> '%s'\n", text, ass_buffer);
+        //fprintf(stderr, "[%s][%s(%d)] '%s' '%s' -> '%s'\n", __TIME__, __FILE__, __LINE__, "Test - Accure ass tag :", text, ass_buffer);
     }
 
     *sami_ass_text = strdup(ass_buffer_cat);
@@ -875,17 +877,18 @@ int main(int argc, char *argv[])
 
     for(j = 0;j < sync_time_line_max;j ++){
         for(i = 0; subtitle_line[j][i] != NULL;i ++){
-            fprintf(stderr, "(Sync : %d / Line: %d)    : '%s'\n", j, i, subtitle_line[j][i]);
+            fprintf(stderr, "[%s][%s(%d)] (Sync : %d / Line: %d)    : '%s'\n", __TIME__, __FILE__, __LINE__, j, i, subtitle_line[j][i]);
             sami_tag_parse(tag_stack, subtitle_line[j][i], &sami_ass_text);
-            fprintf(stderr, "Test - Final Result     : '%s'\n\n", sami_ass_text);
+            fprintf(stderr, "[%s][%s(%d)] %s '%s'\n\n", __TIME__, __FILE__, __LINE__, "Test - Final Result     :", sami_ass_text);
             free(sami_ass_text);
             free(subtitle_line[j][i]);
         }
-        fprintf(stderr, "-Stack Clean! (Init All Element, EOL)\n");
-        fprintf(stderr, "-------------------------------------\n\n\n");
+
+        fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "-Stack Clean! (Init All Element, EOL)");
+        fprintf(stderr, "[%s][%s(%d)] '%s'\n\n\n", __TIME__, __FILE__, __LINE__, "-------------------------------------");
         sami_tag_stack_free_all(tag_stack, TAG_STACK_MAX);
     }
 
-    fprintf(stderr, "All Finished\n");
+    fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "All Finished");
     return 0;
 }
