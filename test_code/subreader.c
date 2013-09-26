@@ -687,6 +687,32 @@ int sami_tag_font_property_get(Tag *stack_element, char **font_face_buffer, char
     return ret;
 }/*}}}*/
 
+int sami_tag_ass_text(Tag **tag_stack, char *plain_text_buffer, char *ass_buffer)
+{
+    Tag *tag_stack_top;
+    char *stack_pop_face_po,
+         *stack_pop_color_po;
+
+    if(strcmp(plain_text_buffer, "") == 0){
+        return 0;
+    }
+
+    switch(sami_tag_stack_top_get(tag_stack, &tag_stack_top, TAG_STACK_MAX)){
+        case -1:
+            return -1;
+        case -2:
+            return -2;
+    }
+
+    // color 정보만 가져옴 (rt, face는 아직...)
+    sami_tag_font_property_get(tag_stack_top, &stack_pop_face_po, &stack_pop_color_po);
+    fprintf(stderr, "[%s][%s(%d)] %s '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "Test - Font Tag Result  :", stack_pop_face_po, stack_pop_color_po);
+
+    sami_tag_ass_font(ass_buffer, stack_pop_face_po, stack_pop_color_po, plain_text_buffer);
+    
+    return 1;
+}
+
 int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
 {
     // ass buffer는 초기화 되어야 함.
@@ -694,8 +720,6 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
          *tag_container,
          *tag_next_po,
          *tag_property_start_po,
-         *stack_pop_face_po,
-         *stack_pop_color_po,
          text[SAMI_LINE_MAX / 2]            = {0},
          ass_buffer[SAMI_LINE_MAX * 2]      = {0},
          ass_buffer_cat[SAMI_LINE_MAX * 3]  = {0};
@@ -714,16 +738,15 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
             case '<':
                 if(sami_tag_container_get(tag_po, &tag_container, &tag_next_po) != 0){
                     // not exist close tag (unable search '>')
-                    tag_po += strlen(tag_po);
-                    fprintf(stderr, "[%s][%s(%d)] '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Tag", tag_po);
-                    break;
+                    fprintf(stderr, "[%s][%s(%d)] '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : get container failed", tag_po);
+                    goto END_OF_LOOP;
                 }
 
                 if((tag_type = sami_tag_name_set(tag_container, &tag_stack_element_now, &tag_property_flag, &tag_property_start_po)) < 0){
-                    fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : not have tag name, ignore");
+                    fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : not have tag name. ignore this tag");
                     tag_po = tag_next_po;
                     free(tag_container);
-                    break;
+                    goto NEXT_LEFT_BRACKET_SEARCH;
                 }
 
                 // if not <font>(</font>) -> ignore
@@ -731,33 +754,20 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                     tag_po = tag_next_po;
                     free(tag_stack_element_now.name);
                     free(tag_container);
-                    break;
+                    goto NEXT_LEFT_BRACKET_SEARCH;
                 }
 
-                // if exist text
-                if(strcmp(text, "") != 0){
-                    if(sami_tag_stack_top_get(tag_stack, &tag_stack_top, TAG_STACK_MAX) < 0){
-                        fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__,  __FILE__, __LINE__, "ERROR : Under flow or Over flow");
-                        free(tag_stack_element_now.name);
+                switch(sami_tag_ass_text(tag_stack, text, ass_buffer)){
+                    case 1:
+                        fprintf(stderr, "[%s][%s(%d)] %s '%s' -> '%s' (Ac: '%s')\n", __TIME__, __FILE__, __LINE__, "Test - Ass  Tag Result  :", text, ass_buffer, ass_buffer_cat);
+                        strcat(ass_buffer_cat, ass_buffer);
+                        memset(&text, 0, sizeof(text));
+                        tag_text_index  = 0;
                         break;
-                    }
-
-                    //바로 이전태그의 시작과 지금태그의 끝이 같아야 함.
-                    if(sami_tag_check(tag_stack_element_now.name, tag_stack_top->name) < 0){
-                        fprintf(stderr, "[%s][%s(%d)] '%s' '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Not match open/close tag name :", tag_stack_element_now.name, tag_stack_top->name);
+                    default:
+                        fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Under flow or Over flow");
                         free(tag_stack_element_now.name);
-                        break;
-                    }
-
-                    // color 정보만 가져옴 (rt, face는 아직...)  동적할당이 아니라, tag_stack에서 pop에서 할당된 주소만 가지고 온다.
-                    sami_tag_font_property_get(tag_stack_top, &stack_pop_face_po, &stack_pop_color_po);
-                    fprintf(stderr, "[%s][%s(%d)] %s '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "Test - Font Tag Result  :", stack_pop_face_po, stack_pop_color_po);
-                    sami_tag_ass_font(ass_buffer, stack_pop_face_po, stack_pop_color_po, text);
-                    strcat(ass_buffer_cat, ass_buffer);
-                    fprintf(stderr, "[%s][%s(%d)] %s '%s' -> '%s' (Ac: '%s')\n", __TIME__, __FILE__, __LINE__, "Test - Ass  Tag Result  :", text, ass_buffer, ass_buffer_cat);
-
-                    memset(&text, 0, sizeof(text));
-                    tag_text_index  = 0;
+                        goto NEXT_LEFT_BRACKET_SEARCH;
                 }
 
                 switch(tag_type){
@@ -781,6 +791,19 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                         sami_tag_stack_print(tag_stack, TAG_STACK_MAX);
                         break;
                     case TAG_END:
+                        if(sami_tag_stack_top_get(tag_stack, &tag_stack_top, TAG_STACK_MAX) < 0){
+                            fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__,  __FILE__, __LINE__, "ERROR : Under flow or Over flow");
+                            free(tag_stack_element_now.name);
+                            break;
+                        }
+
+                        //바로 이전태그의 시작과 지금태그의 끝이 같아야 함.
+                        if(sami_tag_check(tag_stack_element_now.name, tag_stack_top->name) < 0){
+                            fprintf(stderr, "[%s][%s(%d)] '%s' '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Not match open/close tag name :", tag_stack_element_now.name, tag_stack_top->name);
+                            free(tag_stack_element_now.name);
+                            break;
+                        }
+
                         if(sami_tag_stack_top_remove(tag_stack, tag_stack_top, TAG_STACK_MAX) < 0){
                             fprintf(stderr, "[%s][%s(%d)] %s\n", __TIME__, __FILE__, __LINE__, "ERROR : Stack Delete Error");
                             free(tag_stack_element_now.name);
@@ -793,8 +816,7 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                         break;
                 }
 
-                // do not move free position "tag_container"
-                // do not free tag_stack_element_now.name (if push, use stack)
+                // do not move free position "tag_container", for property
                 free(tag_container);
                 tag_po = tag_next_po;
                 break;
@@ -802,20 +824,18 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                 // no include tag, accure in buffer
                 text[tag_text_index++] = *tag_po++;
                 break;
-        }
-    }
+        } NEXT_LEFT_BRACKET_SEARCH:;
+    } END_OF_LOOP:;
 
-    if(strcmp(text, "") != 0 ){
-        // DO NOT USE POP!
-        if(sami_tag_stack_top_get(tag_stack, &tag_stack_top, TAG_STACK_MAX) >= 0){
-            sami_tag_font_property_get(tag_stack_top, &stack_pop_face_po, &stack_pop_color_po);
-            sami_tag_ass_font(ass_buffer, stack_pop_face_po, stack_pop_color_po, text);
-        }else{
+    // check last string
+    switch(sami_tag_ass_text(tag_stack, text, ass_buffer)){
+        case 1:
+            strcat(ass_buffer_cat, ass_buffer);
+            break;
+        default:
             sprintf(ass_buffer, "%s", text);
-        }
-
-        strcat(ass_buffer_cat, ass_buffer);
-        //fprintf(stderr, "[%s][%s(%d)] '%s' '%s' -> '%s'\n", __TIME__, __FILE__, __LINE__, "Test - Accure ass tag :", text, ass_buffer);
+            strcat(ass_buffer_cat, ass_buffer);
+            break;
     }
 
     *sami_ass_text = strdup(ass_buffer_cat);
