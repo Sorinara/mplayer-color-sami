@@ -598,16 +598,16 @@ int sami_tag_property_set(char *tag_property_start_po, Tag *stack_element)
 
     // <font face='abc' color="0x123456">
     while(*property_po != '\0'){
-        // get property name(face/color)
+        // get property name(face/color) - ERROR Stop! (not exception process)
         if(sami_tag_property_name_get(property_po, &property_name, &property_name_next_po) < 0 ){
-            ret = -2;
+            ret = 1;
             break;
         }
 
-        // get property value
+        // get property value - ERROR Stop! (not exception process)
         if(sami_tag_property_value_get(property_name_next_po, &property_value, &property_value_next_po) < 0){
             free(property_name);
-            ret = -3;
+            ret = 2;
             break;
         }
 
