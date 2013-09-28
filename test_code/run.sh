@@ -28,7 +28,7 @@ rm -rf "$COMPILE_LOG_FILEPATH";echo '[OK]'
 echo -n 'Step 2> Parse SAMI File ...'
 Subtitle_Line_Get "$SAMI_FILEPATH" "$SUBTITLE_LINE_FILEPATH"
 if [ $? != 0 ];then
-    echo Not Exist sami file "$SAMI_FILEPATH"
+    echo Error sami file "$SAMI_FILEPATH" '(not exist or not ascii text type' 
     exit 2
 fi
 

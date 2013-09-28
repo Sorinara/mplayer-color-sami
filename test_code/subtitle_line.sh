@@ -8,18 +8,25 @@ function Subtitle_Line_Scope_Get()
 
     fgrep -n -i '<sync start' "$Parse_filepath" > "$Temp_filepath"
 
+    if [ ! -s "$Temp_filepath" ];then
+        rm -rf "$Temp_filepath"
+        return 1
+    fi
+
     Subtitle_line_valid_start="$(head -1 "$Temp_filepath" | cut -d ':' -f1)"
     Subtitle_line_valid_end="$(tail   -1 "$Temp_filepath" | cut -d ':' -f1)"
 
-    sed -n "$Subtitle_line_valid_start","$Subtitle_line_valid_end"p "$Parse_filepath" > "$Parse_result_filepath"
+    sed -n "$Subtitle_line_valid_start"','"$Subtitle_line_valid_end"'p' "$Parse_filepath" > "$Parse_result_filepath"
 
     rm -rf "$Temp_filepath"
+    return 0
 }
 
 function Subtitle_Line_Get()
 {
     local Sami_filepath="$1"
     local Subtitle_Line_filepath="$2"
+    local Subtitle_default_locale="euckr"
     local Parse_valid_filepath="/tmp/Subtitle_Line_Get_$$"
     local Parse_filepath="/tmp/Subtitle_Line_Iconv_$$"
     local Line=""
@@ -30,11 +37,20 @@ function Subtitle_Line_Get()
         return 1
     fi
 
+    if [ -n "$(file "$Sami_filepath" | grep "UTF-16")" ];then
+        Subtitle_default_locale="utf16"
+    fi
+
     # Change Sami Locale (EUCKR -> UTF8)
-    iconv -c -feuckr -tutf8 "$Sami_filepath" | perl -pe 's/\&nbsp\;//g,s/^\s*$//g,s///g' > "$Parse_filepath"
+    iconv -c -f"$Subtitle_default_locale" -tutf8 "$Sami_filepath" | perl -pe 's/\&nbsp\;//g,s/^\s*$//g,s///g' > "$Parse_filepath"
 
     # get "<Sync Start" Min/Max Line
     Subtitle_Line_Scope_Get "$Parse_filepath" "$Parse_valid_filepath"
+    if [ $? != 0 ];then
+        rm -rf "$Parse_filepath"
+        return 2
+    fi
+
     rm -rf "$Subtitle_Line_filepath" "$Parse_filepath" 
 
     while read Line;do

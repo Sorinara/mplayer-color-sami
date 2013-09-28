@@ -10,6 +10,7 @@ SUBTITLE_FILELIST="/tmp/valgrind_test_filelist_$$"
 DEBUGER_LOG_FILEPATH="/tmp/valgrind_dbg_log_$$"
 SUBTITLE_VALID_LINE_FILEPATH="./result_memory_checker"
 ERROR_FILEPATH=""
+LINE_COUNT=1
 
 function Debug_Valgrind()
 {
@@ -34,8 +35,11 @@ echo 'Step 1> start compile'
 gcc -Wall -g -o "$BINARY_FILEPATH" "$SOURCE_FILEPATH" 2>"$COMPILE_LOG_FILEPATH"
 if [ $? != 0 ];then
     echo 'compile failed'
+    cat "$COMPILE_LOG_FILEPATH"
     exit 2
 fi
+
+rm -rf "$COMPILE_LOG_FILEPATH"
 
 echo -n 'Step 2> select debug mode (v : valgrind, else : normal run) :'
 read Mode
@@ -48,14 +52,17 @@ fi
 
 find "$DIRECTORY_PATH" -iname '*.smi' > "$SUBTITLE_FILELIST"
 if [ ! -s "$SUBTITLE_FILELIST" ];then
+    rm -rf "$SUBTITLE_FILELIST"
     echo 'not exist sami file in target directory'
     exit 3
 fi
 
+SUBTITLE_FILELIST_LINE="$(cat "$SUBTITLE_FILELIST" | wc -l)"
+
 echo 'Step 3> check sami files'
 
 while read LINE;do
-    echo -n "Check "$(basename "$LINE")" ..."
+    echo -n "Check ("$LINE_COUNT"/"$SUBTITLE_FILELIST_LINE") " $(basename "$LINE")" ..."
 
     Subtitle_Line_Get "$LINE" "$SUBTITLE_VALID_LINE_FILEPATH"
     if [ $? != 0 ];then
@@ -79,11 +86,15 @@ while read LINE;do
         ERROR_FILEPATH="$LINE"
         break
     fi
+    LINE_COUNT=$(( $LINE_COUNT + 1))
 done < "$SUBTITLE_FILELIST"
 
 if [ -f "$DEBUGER_LOG_FILEPATH" ];then
     vim "$DEBUGER_LOG_FILEPATH"
 fi
 
-echo "ERROR FILE IS "$LINE""
-rm -rf "$SUBTITLE_FILELIST"
+if [ -n "$LINE" ];then
+    echo "ERROR FILE IS "$LINE""
+fi
+
+rm -rf "$SUBTITLE_FILELIST" "$DEBUGER_LOG_FILEPATH"

@@ -161,12 +161,13 @@ int tagstripdup(char *string, char **strip_string)
     return strip_string_length;
 }/*}}}*/
 
-void sami_tag_stack_free(Tag *stack_element, int free_flag)
+void sami_tag_stack_free(Tag *stack_element)
 {/*{{{*/
     int i;
 
     //fprintf(stderr, "[%s][%s(%d)] Tag Name '%d/%d'\n", __TIME__, __FILE__, __LINE__, stack_element->name_allocation, free_flag);
-    if(free_flag == 1 || stack_element->name_allocation == 1){
+    if(stack_element->name_allocation == 1){
+        fprintf(stderr, "[%s][%s(%d)] %s\n", __TIME__, __FILE__, __LINE__, "Free Tag Name");
         free(stack_element->name);
     }
 
@@ -174,12 +175,14 @@ void sami_tag_stack_free(Tag *stack_element, int free_flag)
 
     for(i = 0;i < stack_element->property_count;i ++){
         //fprintf(stderr, "[%s][%s(%d)] Property '%d/%d'\n", __TIME__, __FILE__, __LINE__, i, stack_element->name_allocation);
-        if(free_flag == 1 || stack_element->property[i].name_allocation== 1){
+        if(stack_element->property[i].name_allocation== 1){
             free(stack_element->property[i].name);
+            fprintf(stderr, "[%s][%s(%d)] Free Property (%d) name\n", __TIME__, __FILE__, __LINE__, i);
         }
 
-        if(free_flag == 1 || stack_element->property[i].value_allocation == 1){
+        if(stack_element->property[i].value_allocation == 1){
             free(stack_element->property[i].value);
+            fprintf(stderr, "[%s][%s(%d)] Free Property (%d) value\n", __TIME__, __FILE__, __LINE__, i);
         }
 
         stack_element->property[i].name     = NULL;
@@ -198,7 +201,8 @@ void sami_tag_stack_free_all(Tag **stack, unsigned int stack_max_size)
             break;
         }
 
-        sami_tag_stack_free(stack[i], 1);
+        fprintf(stderr, "[%s][%s(%d)] -- Free Stack (%d) --\n", __TIME__, __FILE__, __LINE__, i);
+        sami_tag_stack_free(stack[i]);
 
         free(stack[i]);
         stack[i]= NULL;
@@ -260,19 +264,26 @@ int sami_tag_stack_name_search(Tag **stack, const char *tag_name, unsigned int s
     return match_index;
 }/*}}}*/
 
-int sami_tag_stack_element_combine_property_check(Tag *tag_source, char *target_tag_name, int *stack_top, int *stack_index_match)
+void sami_tag_stack_element_combine_property_check(Tag *tag_source, Tag_Property tag_target_property, int *property_name_match_flag, int *property_value_match_flag, int *stack_top, int *stack_index_match)
 {/*{{{*/
-    int property_index,
-        property_match_flag = 0;
+    int property_index;
+
+    *property_name_match_flag   = 0;
+    *property_value_match_flag  = 0;
 
     for(property_index = 0;property_index < tag_source->property_count;property_index ++){
-        if(strcasecmp(tag_source->property[property_index].name, target_tag_name) == 0){
-            property_match_flag = 1;
+        if(strcasecmp(tag_source->property[property_index].name, tag_target_property.name) == 0){
+            *property_name_match_flag = 1;
+
+            if(strcasecmp(tag_source->property[property_index].value, tag_target_property.value) == 0){
+                *property_value_match_flag = 1;
+            }
+
             break;
         }
     }
 
-    switch(property_match_flag){
+    switch(*property_name_match_flag){
         case 0:
             *stack_index_match = *stack_top;
             (*stack_top) ++;
@@ -281,13 +292,13 @@ int sami_tag_stack_element_combine_property_check(Tag *tag_source, char *target_
             *stack_index_match = property_index;
             break;
     }
-
-    return property_match_flag;
 }/*}}}*/
 
 int sami_tag_stack_element_combine(Tag *tag_source, Tag *tag_target, Tag *tag_new)
 {/*{{{*/
     int i,
+        property_name_match_flag,
+        property_value_match_flag,
         new_tag_index,
         new_tag_stack_top = 0;
 
@@ -298,7 +309,7 @@ int sami_tag_stack_element_combine(Tag *tag_source, Tag *tag_target, Tag *tag_ne
     new_tag_stack_top = tag_source->property_count;
 
     // copy tag_source to tag_new and initional allocation flag
-    // (not duplicate data is 0)
+    // (not duplicate data is init 0)
     for(i = 0;i < new_tag_stack_top;i++){
         tag_new->property[i].name               = tag_source->property[i].name;
         tag_new->property[i].value              = tag_source->property[i].value;
@@ -307,17 +318,23 @@ int sami_tag_stack_element_combine(Tag *tag_source, Tag *tag_target, Tag *tag_ne
     }
     
     for(i = 0;i < tag_target->property_count;i++){
-        switch(sami_tag_stack_element_combine_property_check(tag_source, tag_target->property[i].name, &new_tag_stack_top, &new_tag_index)){
-            // new - (not exist element in stack)
+        sami_tag_stack_element_combine_property_check(tag_source, tag_target->property[i], &property_name_match_flag, &property_value_match_flag, &new_tag_stack_top, &new_tag_index);
+
+        switch(property_name_match_flag){
+            // new - (not exist element in stack - top)
             case 0:
                 tag_new->property[new_tag_index].name               = tag_target->property[i].name;
                 tag_new->property[new_tag_index].value              = tag_target->property[i].value;
-                tag_new->property[new_tag_index].name_allocation    = 0;
-                tag_new->property[new_tag_index].value_allocation   = 0;
+                tag_new->property[new_tag_index].name_allocation    = 1;
+                tag_new->property[new_tag_index].value_allocation   = 1;
                 break;
             // exist - only change value (don't touch name)
             case 1:
-                tag_new->property[new_tag_index].value              = tag_target->property[i].value;
+                // dismatch!
+                if(property_value_match_flag == 0){
+                    tag_new->property[new_tag_index].value              = tag_target->property[i].value;
+                    tag_new->property[new_tag_index].value_allocation   = 1;
+                }
                 break;
         }
         //fprintf(stderr, "[%s][%s(%d)] (%d) '%s' : %s\n", __TIME__, __FILE__, __LINE__, new_tag_index, tag_target->property[i].name, tag_target->property[i].value);
@@ -353,7 +370,7 @@ int sami_tag_stack_top_remove(Tag **stack, Tag *stack_element, unsigned int stac
         return -1;
     }
 
-    sami_tag_stack_free(stack[stack_top], 0);
+    sami_tag_stack_free(stack[stack_top]);
     free(stack[stack_top]);
     stack[stack_top] = NULL;
 
@@ -380,7 +397,7 @@ void sami_tag_stack_print(Tag **stack, unsigned int stack_max_size, const char *
         fprintf(stderr, "[%s][%s(%d)] %s (%d) : %s\n", __TIME__, __FILE__, __LINE__, "Stack DATA         ", i, stack[i]->name);
 
         for(j = 0;j < stack[i]->property_count;j ++){
-            fprintf(stderr, "[%s][%s(%d)] %s (%d/%d)         : { [%s] = '%s' }\n", __TIME__, __FILE__, __LINE__, "-Property", j, stack[i]->property_count, stack[i]->property[j].name, stack[i]->property[j].value);
+            fprintf(stderr, "[%s][%s(%d)] %s (%d/%d)         : { [%s](%d) = '%s'(%d) }\n", __TIME__, __FILE__, __LINE__, "-Property", j, stack[i]->property_count, stack[i]->property[j].name, stack[i]->property[j].name_allocation, stack[i]->property[j].value, stack[i]->property[j].value_allocation);
         }
     }
 
@@ -791,7 +808,12 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                             tag_stack_element_push = tag_stack_element_now;
                         }
 
-                        sami_tag_stack_push(tag_stack, tag_stack_element_push, TAG_STACK_MAX);
+                        if(sami_tag_stack_push(tag_stack, tag_stack_element_push, TAG_STACK_MAX) < 0){
+                            fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Stack Push Failed");
+                            free(tag_stack_element_now.name);
+                            goto END_OF_TAG;
+                        }
+
                         sami_tag_stack_print(tag_stack, TAG_STACK_MAX, "Push OK, Stack Status   :");
                         break;
                     case TAG_END:
@@ -913,9 +935,9 @@ int main(int argc, char *argv[])
             free(subtitle_line[j][i]);
         }
 
+        sami_tag_stack_free_all(tag_stack, TAG_STACK_MAX);
         fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "-Stack Clean! (Init All Element, EOL)");
         fprintf(stderr, "[%s][%s(%d)] '%s'\n\n\n", __TIME__, __FILE__, __LINE__, "-------------------------------------");
-        sami_tag_stack_free_all(tag_stack, TAG_STACK_MAX);
     }
 
     fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "All Finished");
