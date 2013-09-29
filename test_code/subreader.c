@@ -777,6 +777,9 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                     goto END_OF_LINE;
                 }
 
+                // must be initinal for "property_count in Tag)
+                memset(&tag_stack_element_now, 0, sizeof(tag_stack_element_now));
+
                 if((tag_type = sami_tag_name_set(tag_container, &tag_stack_element_now, &tag_property_flag, &tag_property_start_po)) < 0){
                     fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : not have tag name. ignore this tag");
                     goto END_OF_TAG;
@@ -800,8 +803,9 @@ int sami_tag_parse(Tag **tag_stack, char *font_tag_string, char **sami_ass_text)
                         break;
                     default:
                         strcat(ass_buffer_cat, text);
-                        free(tag_stack_element_now.name);
-                        goto END_OF_TAG;
+                        memset(&text, 0, sizeof(text));
+                        tag_text_index  = 0;
+                        break;
                 }
 
                 switch(tag_type){
