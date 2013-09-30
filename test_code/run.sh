@@ -36,7 +36,7 @@ fi
 echo '[OK]'
 
 # 3, 3에서 생성된 임시파일을 바이너리의 첫번째 파리미터에 넣어서 실행
-echo -n 'Select debug mode (run/v) :'
+echo -n 'Select debug mode (run/v/d) :'
 read Option
 
 if [ "$Option" = 'v' ];then
@@ -47,7 +47,8 @@ if [ "$Option" = 'v' ];then
     else
         echo valgrind, No ERROR ALL OK!
     fi
-
+elif [ "$Option" = 'd' ];then
+    cgdb "$BINARY_FILEPATH"
 else
     "$BINARY_FILEPATH" "$SUBTITLE_LINE_FILEPATH"
 fi
