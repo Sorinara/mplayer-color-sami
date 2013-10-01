@@ -19,16 +19,16 @@
 char *subtitle_line[5000][16] = {{NULL}};
 
 typedef struct _Tag_Property{
-    char *name,
-         *value;
     int  name_allocation,
          value_allocation;
+    char *name,
+         *value;
 } Tag_Property;
 
 typedef struct _Tag{
-    char *name;
     int  name_allocation,
          property_count;
+    char *name;
 
     Tag_Property property[TAG_PROPERTY_MAX];
 } Tag;
@@ -71,7 +71,11 @@ int stack_push(void **stack, void *element, unsigned int element_size, unsigned 
         return -1;
     }
 
-    stack[stack_top_index + 1] = calloc(1, element_size);
+    if((stack[stack_top_index + 1] = calloc(1, element_size)) == NULL){
+        return -2;
+    }
+
+    fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s' (%p)\n", __TIME__,  __FILE__, __LINE__, "Element Allocated", stack[stack_top_index + 1]);
     memcpy(stack[stack_top_index + 1], element, element_size);
     return 0;
 }/*}}}*/
@@ -86,7 +90,7 @@ int stack_pop(void **stack, void *element, void (*stack_element_free)(void*), un
     }
 
     stack_element_free(stack[stack_top_index]);
-    fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s' (%d)\n", __TIME__,  __FILE__, __LINE__, "Stack Element Free", stack_top_index);
+    fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s' (%d) (%p)\n", __TIME__,  __FILE__, __LINE__, "Stack Element Free", stack_top_index, stack[stack_top_index]);
     free(stack[stack_top_index]);
     fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s'\n", __TIME__,  __FILE__, __LINE__, "Stack Element Free - Done");
     stack[stack_top_index] = NULL;
@@ -103,7 +107,7 @@ void stack_free(void **stack, void (*stack_element_free)(void*), unsigned int el
             break;
         }
 
-        fprintf(stderr, "[%s][%s(%d)] -- Free Stack (%d) --\n", __TIME__, __FILE__, __LINE__, i);
+        fprintf(stderr, "[%s][%s(%d)] -- Free Stack (%d) (%p) --\n", __TIME__, __FILE__, __LINE__, i, stack[i]);
 
         stack_element_free(stack[i]);
         free(stack[i]);
@@ -249,7 +253,7 @@ void sami_tag_stack_element_free(void *stack_element_void)
 
     //fprintf(stderr, "[%s][%s(%d)] Tag Name '%d/%d'\n", __TIME__, __FILE__, __LINE__, element->name_allocation, free_flag);
     if(element->name_allocation == 1){
-        fprintf(stderr, "[%s][%s(%d)] %s\n", __TIME__, __FILE__, __LINE__, "Free Tag Name");
+        fprintf(stderr, "[%s][%s(%d)] %s (%p)\n", __TIME__, __FILE__, __LINE__, "Free Tag Name", element->name);
         free(element->name);
     }
 
@@ -258,12 +262,12 @@ void sami_tag_stack_element_free(void *stack_element_void)
     for(i = 0;i < element->property_count;i ++){
         if(element->property[i].name_allocation == 1){
             free(element->property[i].name);
-            fprintf(stderr, "[%s][%s(%d)] Free Property (%d) name\n", __TIME__, __FILE__, __LINE__, i);
+            fprintf(stderr, "[%s][%s(%d)] Free Property (%d) name (%p)\n", __TIME__, __FILE__, __LINE__, i, element->property[i].name);
         }
 
         if(element->property[i].value_allocation == 1){
             free(element->property[i].value);
-            fprintf(stderr, "[%s][%s(%d)] Free Property (%d) value\n", __TIME__, __FILE__, __LINE__, i);
+            fprintf(stderr, "[%s][%s(%d)] Free Property (%d) value (%p)\n", __TIME__, __FILE__, __LINE__, i, element->property[i].value);
         }
 
         element->property[i].name     = NULL;
@@ -861,6 +865,8 @@ int sami_tag_parse(void **tag_stack, char *font_tag_string, char **sami_ass_text
 
                         // end tag is useless
                         free(tag_stack_element_now.name);
+
+                        sami_tag_stack_print(tag_stack, TAG_STACK_MAX, "Pop Start Stack status  :");
 
                         if(stack_pop(tag_stack, tag_stack_top, sami_tag_stack_element_free, TAG_STACK_MAX) < 0){
                             fprintf(stderr, "[%s][%s(%d)] %s\n", __TIME__, __FILE__, __LINE__, "ERROR : Stack Delete Error");
