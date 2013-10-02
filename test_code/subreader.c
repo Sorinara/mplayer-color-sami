@@ -9,12 +9,9 @@
 #include <sys/types.h>
 #include "subreader_sami.h"
 
-#define TAG_START           0
-#define TAG_END             1
-
-#define LINE_LENGTH_MAX     512
-#define TAG_PROPERTY_MAX    256
-#define TAG_STACK_MAX       32
+#define TEXT_LINE_LENGTH_MAX    512
+#define TAG_PROPERTY_MAX        256
+#define TAG_STACK_MAX           32
 
 char *subtitle_line[5000][16] = {{NULL}};
 
@@ -33,7 +30,7 @@ typedef struct _Tag{
     Tag_Property property[TAG_PROPERTY_MAX];
 } Tag;
 
-int stack_top(void **stack, void **element, const unsigned int element_max_count)
+int stack_top_index_get(void **stack, const unsigned int element_max_count)
 {/*{{{*/
     int stack_index;
 
@@ -55,10 +52,6 @@ int stack_top(void **stack, void **element, const unsigned int element_max_count
         return -2;
     }
 
-    if(element != NULL){
-       *element = stack[stack_index];
-    }
-
     return stack_index;
 }/*}}}*/
 
@@ -67,7 +60,7 @@ int stack_push(void **stack, const void *element, const unsigned int element_siz
     int stack_top_index;
 
     // check overflow
-    if((stack_top_index = stack_top(stack, NULL, element_max_count)) == -2){
+    if((stack_top_index = stack_top_index_get(stack, element_max_count)) == -2){
         return -1;
     }
 
@@ -80,7 +73,27 @@ int stack_push(void **stack, const void *element, const unsigned int element_siz
     return 0;
 }/*}}}*/
 
-void stack_pop_remove(void **stack, const unsigned int index, void (*stack_element_free)(void*))
+int stack_top_get(void **stack, void **element, const unsigned int element_max_count)
+{/*{{{*/
+    int stack_top_index;
+
+    // check overflow
+    switch((stack_top_index = stack_top_index_get(stack, element_max_count))){
+        case -1:
+            return -1;
+        case -2:
+            return -2;
+    }
+
+    if(element != NULL){
+       *element = stack[stack_top_index];
+    }
+
+    return stack_top_index;
+}/*}}}*/
+
+// only remove, if you want get element in stack, use "stack_top_get()"
+void stack_pop(void **stack, const unsigned int index, void (*stack_element_free)(void*))
 {/*{{{*/
     stack_element_free(stack[index]);
     //fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s' (%d) (%p)\n", __TIME__,  __FILE__, __LINE__, "Stack Element Free", index, stack[index]);
@@ -89,20 +102,7 @@ void stack_pop_remove(void **stack, const unsigned int index, void (*stack_eleme
     stack[index] = NULL;
 }/*}}}*/
 
-int stack_pop(void **stack, void *element, void (*stack_element_free)(void*), const unsigned int element_max_count)
-{/*{{{*/
-    int stack_top_index;
-
-    // check underflow
-    if((stack_top_index = stack_top(stack, element, element_max_count)) == -1){
-        return -1;
-    }
-
-    stack_pop_remove(stack, stack_top_index, stack_element_free);
-
-    return 0;
-}/*}}}*/
-
+// delete all element in stack
 void stack_free(void **stack, void (*stack_element_free)(void*), const unsigned int element_max_count)
 {/*{{{*/
     int stack_index;
@@ -447,12 +447,12 @@ int sami_tag_name_get(char *tag_container, char **tag_name, int *property_flag, 
             return -1;
         }
 
-        tag_type            = TAG_END;
+        tag_type            = 1; // end
         *property_flag      = 0;
         *next_po            = NULL;
     // get tag name "<font color="blue">" (have property)
     }else if(strescmget(tag_container, '\0', ' ', tag_name, next_po) > 0){
-        tag_type            = TAG_START;
+        tag_type            = 0;
         *property_flag      = 1;
     // get tag_name "<ruby>" (not have property)
     }else{
@@ -460,7 +460,7 @@ int sami_tag_name_get(char *tag_container, char **tag_name, int *property_flag, 
             return -2;
         }
 
-        tag_type            = TAG_START;
+        tag_type            = 0; // start
         *property_flag      = 0;
         *next_po            = NULL;
     }
@@ -597,7 +597,7 @@ int sami_tag_ass(void **tag_stack, const unsigned int tag_stack_max, char *plain
         return 0;
     }
 
-    switch(stack_top(tag_stack, (void *)&tag_stack_top, tag_stack_max)){
+    switch(stack_top_get(tag_stack, (void *)&tag_stack_top, tag_stack_max)){
         case -1:
             return -1;
         case -2:
@@ -800,7 +800,7 @@ int sami_tag_parse_end(void **tag_stack, const unsigned int tag_stack_max, const
     Tag  *tag_stack_top;
     int stack_top_index;
 
-    if((stack_top_index = stack_top(tag_stack, (void *)&tag_stack_top, tag_stack_max)) < 0){
+    if((stack_top_index = stack_top_get(tag_stack, (void *)&tag_stack_top, tag_stack_max)) < 0){
         fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__,  __FILE__, __LINE__, "ERROR : Under flow or Over flow in stack. (end tag)");
         return -1;
     }
@@ -811,8 +811,7 @@ int sami_tag_parse_end(void **tag_stack, const unsigned int tag_stack_max, const
         return -2;
     }
 
-    // useless stack_pop()
-    stack_pop_remove(tag_stack, (unsigned int)stack_top_index, sami_tag_stack_element_free);
+    stack_pop(tag_stack, (unsigned int)stack_top_index, sami_tag_stack_element_free);
 
     return 0;
 }/*}}}*/
@@ -825,9 +824,9 @@ int sami_tag_parse(void **tag_stack, const unsigned int tag_stack_max, char *sou
          *tag_next_po,
          *tag_name,
          *tag_property_start_po,
-         text[LINE_LENGTH_MAX / 2]            = {0},
-         ass_buffer[LINE_LENGTH_MAX * 2]      = {0},
-         ass_buffer_cat[LINE_LENGTH_MAX * 3]  = {0};
+         text[TEXT_LINE_LENGTH_MAX / 2]            = {0},
+         ass_buffer[TEXT_LINE_LENGTH_MAX * 2]      = {0},
+         ass_buffer_cat[TEXT_LINE_LENGTH_MAX * 3]  = {0};
     int  tag_type,
          tag_property_flag      = 0,
          tag_text_index         = 0;
@@ -854,14 +853,14 @@ int sami_tag_parse(void **tag_stack, const unsigned int tag_stack_max, char *sou
                 }
 
                 switch(sami_tag_ass(tag_stack, tag_stack_max, text, ass_buffer)){
-                    case 0:
+                    case 0: // not exist text
                         break;
-                    case 1:
+                    case 1: // ass text
                         strcat(ass_buffer_cat, ass_buffer);
                         memset(&text, 0, sizeof(text));
                         tag_text_index  = 0;
                         break;
-                    default:
+                    default: // plain text
                         strcat(ass_buffer_cat, text);
                         memset(&text, 0, sizeof(text));
                         tag_text_index  = 0;
@@ -869,11 +868,11 @@ int sami_tag_parse(void **tag_stack, const unsigned int tag_stack_max, char *sou
                 }
 
                 switch(tag_type){
-                    case TAG_START:
+                    case 0: // start tag
                         sami_tag_parse_start(tag_stack, tag_stack_max, tag_name, tag_property_start_po, tag_property_flag);
                         sami_tag_stack_print(tag_stack, tag_stack_max, "Tag Start Push OK, Stack Result :");
                         break;
-                    case TAG_END:
+                    case 1: // end tag
                         sami_tag_parse_end(tag_stack, tag_stack_max, tag_name);
                         sami_tag_stack_print(tag_stack, tag_stack_max, "Tag End   Pop  OK, Stack Result :");
                         break;
