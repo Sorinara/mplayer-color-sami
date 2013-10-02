@@ -1,12 +1,9 @@
-#define _GNU_SOURCE   
+#define _GNU_SOURCE
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 #include <ctype.h>
-
-#include <sys/types.h>
 #include "subreader_sami.h"
 
 #define TEXT_LINE_LENGTH_MAX    512
@@ -55,24 +52,7 @@ int stack_top_index_get(void **stack, const unsigned int element_max_count)
     return stack_index;
 }/*}}}*/
 
-int stack_push(void **stack, const void *element, const unsigned int element_size, const unsigned int element_max_count)
-{/*{{{*/
-    int stack_top_index;
-
-    // check overflow
-    if((stack_top_index = stack_top_index_get(stack, element_max_count)) == -2){
-        return -1;
-    }
-
-    if((stack[stack_top_index + 1] = calloc(1, element_size)) == NULL){
-        return -2;
-    }
-
-    //fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s' (%p)\n", __TIME__,  __FILE__, __LINE__, "Element Allocated", stack[stack_top_index + 1]);
-    memcpy(stack[stack_top_index + 1], element, element_size);
-    return 0;
-}/*}}}*/
-
+// get point in stack, not data structure !
 int stack_top_get(void **stack, void **element, const unsigned int element_max_count)
 {/*{{{*/
     int stack_top_index;
@@ -92,7 +72,26 @@ int stack_top_get(void **stack, void **element, const unsigned int element_max_c
     return stack_top_index;
 }/*}}}*/
 
-// only remove, if you want get element in stack, use "stack_top_get()"
+// top position in stack, memory allocation
+int stack_push(void **stack, const void *element, const unsigned int element_size, const unsigned int element_max_count)
+{/*{{{*/
+    int stack_top_index;
+
+    // check overflow
+    if((stack_top_index = stack_top_index_get(stack, element_max_count)) == -2){
+        return -1;
+    }
+
+    if((stack[stack_top_index + 1] = calloc(1, element_size)) == NULL){
+        return -2;
+    }
+
+    //fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s' (%p)\n", __TIME__,  __FILE__, __LINE__, "Element Allocated", stack[stack_top_index + 1]);
+    memcpy(stack[stack_top_index + 1], element, element_size);
+    return 0;
+}/*}}}*/
+
+// remove only, if you want get element in stack, use "stack_top_get()"
 void stack_pop(void **stack, const unsigned int index, void (*stack_element_free)(void*))
 {/*{{{*/
     stack_element_free(stack[index]);
@@ -102,7 +101,7 @@ void stack_pop(void **stack, const unsigned int index, void (*stack_element_free
     stack[index] = NULL;
 }/*}}}*/
 
-// delete all element in stack
+// delete all (allocated memory)element in stack
 void stack_free(void **stack, void (*stack_element_free)(void*), const unsigned int element_max_count)
 {/*{{{*/
     int stack_index;
@@ -824,9 +823,9 @@ int sami_tag_parse(void **tag_stack, const unsigned int tag_stack_max, char *sou
          *tag_next_po,
          *tag_name,
          *tag_property_start_po,
-         text[TEXT_LINE_LENGTH_MAX / 2]            = {0},
-         ass_buffer[TEXT_LINE_LENGTH_MAX * 2]      = {0},
-         ass_buffer_cat[TEXT_LINE_LENGTH_MAX * 3]  = {0};
+         text[TEXT_LINE_LENGTH_MAX]                 = {0},
+         ass_buffer[TEXT_LINE_LENGTH_MAX * 2]       = {0},
+         ass_buffer_cat[TEXT_LINE_LENGTH_MAX * 3]   = {0};
     int  tag_type,
          tag_property_flag      = 0,
          tag_text_index         = 0;
