@@ -501,7 +501,7 @@ int sami_tag_ass_font_color_table(const char *color_name, char *color_buffer)
     return 0;
 }/*}}}*/
 
-int sami_tag_ass_font_color(char *ass_buffer, const char *color_value)
+int sami_tag_ass_font_color(char *ass_buffer, const char *color_value, const char *subtitle_text)
 {/*{{{*/
     // must be init 0
     char color_value_buffer[7]      = {0},
@@ -535,7 +535,8 @@ int sami_tag_ass_font_color(char *ass_buffer, const char *color_value)
         memcpy(color_rgb_buffer + 2, color_value_buffer + 2, 2);
         memcpy(color_rgb_buffer + 4, color_value_buffer + 0, 2);
         color_rgb_number = strtol(color_rgb_buffer, NULL, 16);
-        snprintf(ass_buffer, 16, "{\\r\\c&H%06X&}", color_rgb_number);
+
+        sprintf(ass_buffer, "{\\r\\c&H%06X&}%s{\\r}", color_rgb_number, subtitle_text);
     }
 
     return 0;
@@ -568,18 +569,30 @@ int sami_tag_ass_font(const Tag *tag_stack_top, char *ass_buffer, const char *te
          *color_value_po;
 
     // color 정보만 가져옴 (rt, face, bold, italic는 아직...)
-    sami_tag_ass_font_property_get(tag_stack_top, &face_value_po, &color_value_po);
-    fprintf(stderr, "[%s][%s(%d)] %s '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "Test - Font Tag Result  :", face_value_po, color_value_po);
+    if(strcasecmp(tag_stack_top->name, "font") == 0 ){
+        sami_tag_ass_font_property_get(tag_stack_top, &face_value_po, &color_value_po);
 
-    if(color_value_po != NULL){
-        if(sami_tag_ass_font_color(ass_buffer, color_value_po) < 0){
-            return -1;
+        if(color_value_po != NULL){
+            if(sami_tag_ass_font_color(ass_buffer, color_value_po, text) < 0){
+                return -1;
+            }
         }
 
-        sprintf(ass_buffer + 15, "%s{\\r}", text);
-    }else{
-        // change to strcat...
-        sprintf(ass_buffer, "%s", text);
+        /*
+        if(face_value_po != NULL){
+            if(sami_tag_ass_font_face(ass_buffer, face_value_po, text) < 0){
+                return -1;
+            }
+        }  */
+        fprintf(stderr, "[%s][%s(%d)] %s '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "Test - Font Tag Result  :", face_value_po, color_value_po);
+    }
+    
+    if(strcasecmp(tag_stack_top->name, "b") == 0 ){
+        fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s'\n", __TIME__,  __FILE__, __LINE__, "Bold");
+    }
+
+    if(strcasecmp(tag_stack_top->name, "i") == 0 ){
+        fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s'\n", __TIME__,  __FILE__, __LINE__, "Italic");
     }
 
     return 0;
@@ -590,21 +603,24 @@ int sami_tag_ass_font(const Tag *tag_stack_top, char *ass_buffer, const char *te
 // return -1 / -2   : only text
 int sami_tag_ass(void **tag_stack, const unsigned int tag_stack_max, char *plain_text_buffer, char *ass_buffer)
 {/*{{{*/
-    Tag *tag_stack_top;
+    int i,
+        tag_stack_top_index;
 
     if(strcmp(plain_text_buffer, "") == 0){
         return 0;
     }
 
-    switch(stack_top_get(tag_stack, (void *)&tag_stack_top, tag_stack_max)){
+    switch((tag_stack_top_index = stack_top_get(tag_stack, NULL, tag_stack_max))){
         case -1:
             return -1;
         case -2:
             return -2;
     }
 
-    if(sami_tag_ass_font(tag_stack_top, ass_buffer, plain_text_buffer) < 0){
-        return -3;
+    for(i = 0;i < tag_stack_top_index + 1;i++){
+        if(sami_tag_ass_font(tag_stack[i], ass_buffer, plain_text_buffer) < 0){
+            return -3;
+        }
     }
     
     return 1;
@@ -843,11 +859,6 @@ int sami_tag_parse(void **tag_stack, const unsigned int tag_stack_max, char *sou
 
                 if((tag_type = sami_tag_name_get(tag_container, &tag_name, &tag_property_flag, &tag_property_start_po)) < 0){
                     fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : not have tag name. ignore this tag");
-                    goto END_OF_TAG;
-                }
-
-                // if not <font>(</font>) -> ignore
-                if(strcasecmp(tag_name, "font") != 0){
                     goto END_OF_TAG;
                 }
 
