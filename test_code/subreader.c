@@ -6,9 +6,11 @@
 #include <ctype.h>
 #include "subreader_sami.h"
 
-#define TEXT_LINE_LENGTH_MAX    512
-#define TAG_PROPERTY_MAX        256
-#define TAG_STACK_MAX           32
+#define TEXT_LINE_LENGTH_MAX        256
+#define ASS_BUFFER_LENGTH_MAX       512
+#define ASS_BUFFER_CAT_LENGTH_MAX   1024
+#define TAG_PROPERTY_MAX            256
+#define TAG_STACK_MAX               32
 
 char *subtitle_line[5000][16] = {{NULL}};
 
@@ -453,7 +455,7 @@ int sami_tag_name_get(char *tag_container, char **tag_name, int *property_flag, 
     }else if(strescmget(tag_container, '\0', ' ', tag_name, next_po) > 0){
         tag_type            = 0;
         *property_flag      = 1;
-    // get tag_name "<ruby>" (not have property)
+    // get tag_name "<i>" (not have property)
     }else{
         if(strstripdup(tag_container, tag_name) < 0){
             return -2;
@@ -467,165 +469,22 @@ int sami_tag_name_get(char *tag_container, char **tag_name, int *property_flag, 
     return tag_type;
 } /*}}}*/
 
-int sami_tag_ass_font_color_table(const char *color_name, char *color_buffer)
-{/*{{{*/
-    char first_char,
-         *color_name_table[SAMI_COLORSET_ARRAY_MAX_ROW][SAMI_COLORSET_ARRAY_MAX_COLUMN]  = SAMI_COLORSET_ARRAY_NAME;
-    unsigned int color_value_table[SAMI_COLORSET_ARRAY_MAX_ROW][SAMI_COLORSET_ARRAY_MAX_COLUMN] = SAMI_COLORSET_ARRAY_VALUE;
-    int color_table_index,
-        i,
-        color_value,
-        color_flag = 0;
-    
-    first_char = *color_name;
-
-    if(isalpha(first_char) == 0){
-        return -1;
-    }
-
-    color_table_index = (char)tolower(first_char) - 'a';
-
-    for(i = 0;color_name_table[color_table_index][i] != NULL;i ++){
-        if(strcasecmp(color_name, color_name_table[color_table_index][i]) == 0){
-            color_value = color_value_table[color_table_index][i];
-            sprintf(color_buffer, "%06x", color_value);
-            color_flag = 1;
-            break;
-        }
-    }
-
-    if(color_flag == 0){
-        return -2;
-    }
-
-    return 0;
-}/*}}}*/
-
-int sami_tag_ass_font_color(char *ass_buffer, const char *color_value, const char *subtitle_text)
-{/*{{{*/
-    // must be init 0
-    char color_value_buffer[7]      = {0},
-         color_rgb_buffer[7]        = {0},
-         *strtol_po;
-    unsigned int color_rgb_number   = 0;
-    int color_value_length          = 0,
-        color_value_length_valid    = 0;
-
-    if(*color_value == '#'){
-        color_value ++;
-    }
-
-    // 앞부분 color가 A-F이면 문제가 발생하니까, 
-    // 리턴값으로 결과를 확인하는게 아니라, 처리된 갯수로 확인해야 함.
-    strtol(color_value, &strtol_po, 16);
-    color_value_length          = strlen(color_value);
-    color_value_length_valid    = strtol_po - color_value;
-
-    if(color_value_length != color_value_length_valid){
-        if(sami_tag_ass_font_color_table(color_value, color_value_buffer) < 0){
-            return -1;
-        }
-    }else{
-        sprintf(color_value_buffer, color_value);
-    }
-
-    if(strcmp(color_value_buffer, "") != 0){
-        // sami자막의 color순서(RGB)와 ass간의 color(BGR)순서가 다르다.
-        memcpy(color_rgb_buffer + 0, color_value_buffer + 4, 2);
-        memcpy(color_rgb_buffer + 2, color_value_buffer + 2, 2);
-        memcpy(color_rgb_buffer + 4, color_value_buffer + 0, 2);
-        color_rgb_number = strtol(color_rgb_buffer, NULL, 16);
-
-        sprintf(ass_buffer, "{\\r\\c&H%06X&}%s{\\r}", color_rgb_number, subtitle_text);
-    }
-
-    return 0;
-}/*}}}*/
-
-int sami_tag_ass_font_property_get(const Tag *element, char **font_face_buffer, char **font_color_buffer)
+void sami_tag_property_get(const Tag *element, Tag_Property *font_property, const unsigned int property_max)
 {/*{{{*/
     int i,
-        ret = 0;
+        j;
 
-    *font_face_buffer  = NULL;
-    *font_color_buffer = NULL;
+    for(i = 0;i < (int)property_max;i++){
+        font_property[i].value = "";
 
-    for(i = 0;i < element->property_count;i ++){
-        if(strcasecmp(element->property[i].name, "face") == 0){
-            *font_face_buffer = element->property[i].value;
-            ret |= 1;
-        }else if(strcasecmp(element->property[i].name, "color") == 0){
-            *font_color_buffer = element->property[i].value;
-            ret |= 2;
-        }
-    }
-
-    return ret;
-}/*}}}*/
-
-int sami_tag_ass_font(const Tag *tag_stack_top, char *ass_buffer, const char *text)
-{/*{{{*/
-    char *face_value_po,
-         *color_value_po;
-
-    // color 정보만 가져옴 (rt, face, bold, italic는 아직...)
-    if(strcasecmp(tag_stack_top->name, "font") == 0 ){
-        sami_tag_ass_font_property_get(tag_stack_top, &face_value_po, &color_value_po);
-
-        if(color_value_po != NULL){
-            if(sami_tag_ass_font_color(ass_buffer, color_value_po, text) < 0){
-                return -1;
+        for(j = 0;j < element->property_count;j ++){
+            if(strcasecmp(font_property[i].name, element->property[j].name) == 0){
+                font_property[i].value              = element->property[j].value;
+                font_property[i].value_allocation   = 0;
             }
         }
-
-        /*
-        if(face_value_po != NULL){
-            if(sami_tag_ass_font_face(ass_buffer, face_value_po, text) < 0){
-                return -1;
-            }
-        }  */
-        fprintf(stderr, "[%s][%s(%d)] %s '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "Test - Font Tag Result  :", face_value_po, color_value_po);
     }
-    
-    if(strcasecmp(tag_stack_top->name, "b") == 0 ){
-        fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s'\n", __TIME__,  __FILE__, __LINE__, "Bold");
-    }
-
-    if(strcasecmp(tag_stack_top->name, "i") == 0 ){
-        fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s'\n", __TIME__,  __FILE__, __LINE__, "Italic");
-    }
-
-    return 0;
 }/*}}}*/
-
-// return 0         : empty text
-// return 1         : exist ass text
-// return -1 / -2   : only text
-int sami_tag_ass(void **tag_stack, const unsigned int tag_stack_max, char *plain_text_buffer, char *ass_buffer)
-{/*{{{*/
-    int i,
-        tag_stack_top_index;
-
-    if(strcmp(plain_text_buffer, "") == 0){
-        return 0;
-    }
-
-    switch((tag_stack_top_index = stack_top_get(tag_stack, NULL, tag_stack_max))){
-        case -1:
-            return -1;
-        case -2:
-            return -2;
-    }
-
-    for(i = 0;i < tag_stack_top_index + 1;i++){
-        if(sami_tag_ass_font(tag_stack[i], ass_buffer, plain_text_buffer) < 0){
-            return -3;
-        }
-    }
-    
-    return 1;
-}
-/*}}}*/
 
 int sami_tag_property_name_get(char *string, char **property_name_strip, char **next)
 {/*{{{*/
@@ -761,6 +620,210 @@ int sami_tag_property_set(char *tag_property_start_po, Tag *element)
     return ret;
 }/*}}}*/
 
+int sami_tag_ass_font_color_table(const char *color_name, char *color_buffer)
+{/*{{{*/
+    char first_char,
+         *color_name_table[SAMI_COLORSET_ARRAY_MAX_ROW][SAMI_COLORSET_ARRAY_MAX_COLUMN]  = SAMI_COLORSET_ARRAY_NAME;
+    unsigned int color_value_table[SAMI_COLORSET_ARRAY_MAX_ROW][SAMI_COLORSET_ARRAY_MAX_COLUMN] = SAMI_COLORSET_ARRAY_VALUE;
+    int color_table_index,
+        i,
+        color_value,
+        color_flag = 0;
+    
+    first_char = *color_name;
+
+    if(isalpha(first_char) == 0){
+        return -1;
+    }
+
+    color_table_index = (char)tolower(first_char) - 'a';
+
+    for(i = 0;color_name_table[color_table_index][i] != NULL;i ++){
+        if(strcasecmp(color_name, color_name_table[color_table_index][i]) == 0){
+            color_value = color_value_table[color_table_index][i];
+            sprintf(color_buffer, "%06x", color_value);
+            color_flag = 1;
+            break;
+        }
+    }
+
+    if(color_flag == 0){
+        return -2;
+    }
+
+    return 0;
+}/*}}}*/
+
+int sami_tag_ass_font_color_tag(const char *color_value, char *ass_color_buffer)
+{/*{{{*/
+    // must be init 0
+    char color_rgb_buffer[7]      = {0},
+         color_bgr_buffer[7]      = {0},
+         *strtol_po;
+    unsigned int color_rgb_number   = 0;
+    int color_value_length          = 0,
+        color_value_length_valid    = 0,
+        ass_color_buffer_fix_length = 16;
+
+    if(*color_value == '#'){
+        color_value ++;
+    }
+
+    // 앞부분 color가 A-F이면 문제가 발생하니까, 
+    // 리턴값으로 결과를 확인하는게 아니라, 처리된 갯수로 확인해야 함.
+    strtol(color_value, &strtol_po, 16);
+    color_value_length          = strlen(color_value);
+    color_value_length_valid    = strtol_po - color_value;
+
+    if(color_value_length != color_value_length_valid){
+        if(sami_tag_ass_font_color_table(color_value, color_rgb_buffer) < 0){
+            return -1;
+        }
+    }else{
+        sprintf(color_rgb_buffer, color_value);
+    }
+
+    if(strcmp(color_rgb_buffer, "") != 0){
+        // change sami subtitle color (RGB) to ass color(BGR)
+        memcpy(color_bgr_buffer + 0, color_rgb_buffer + 4, 2);
+        memcpy(color_bgr_buffer + 2, color_rgb_buffer + 2, 2);
+        memcpy(color_bgr_buffer + 4, color_rgb_buffer + 0, 2);
+        color_rgb_number = strtol(color_bgr_buffer, NULL, 16);
+
+        memset(ass_color_buffer, 0, ass_color_buffer_fix_length);
+        snprintf(ass_color_buffer, ass_color_buffer_fix_length, "\\r\\c&H%06X&", color_rgb_number);
+    }
+
+    return 0;
+}/*}}}*/
+
+/* int sami_tag_ass_font_face_tag()
+{
+
+} */
+
+int sami_ass_tag_set(const char *tag_start, const char *text, const char *tag_end, char **save_buffer)
+{/*{{{*/
+    int tag_start_length,
+        text_length,
+        tag_end_length;
+
+    if((tag_start_length = strlen(tag_start)) < 0){
+        return -1;
+    }
+
+    if((text_length = strlen(text)) < 0){
+        return -2;
+    }
+
+    if((tag_end_length = strlen(tag_end)) < 0){
+        return -3;
+    }
+
+    if((*save_buffer = calloc(1, tag_start_length + text_length + tag_end_length)) == NULL){
+        return -4;
+    }
+
+    snprintf(*save_buffer, tag_end_length, "{\\%s}%s{\\%s}", tag_start, text, tag_end);
+
+    return 0;
+}/*}}}*/
+
+int sami_tag_ass_text(const Tag *tag_stack_top, char *stack_ass_buffer, const char *text)
+{/*{{{*/
+    Tag_Property font_property[2];
+    char ass_color_tag_start[16],
+         *ass_tag;
+
+    if(strcasecmp(tag_stack_top->name, "font") == 0 ){
+        memset(font_property, 0, sizeof(font_property));
+        font_property[0].name = "color";
+        font_property[1].name = "face";
+
+        sami_tag_property_get(tag_stack_top, font_property, 2);
+
+        if(strcmp(font_property[0].value, "") != 0){
+            if(sami_tag_ass_font_color_tag(font_property[0].value, ass_color_tag_start) < 0){
+                return -1;
+            }
+
+            sami_ass_tag_set(ass_color_tag_start, text, "r", &ass_tag);
+        }
+
+        // face - only englist name, 한글이름은 바로깨짐.
+        // 일단 fc-list에서 나오는 영문이름으로 하면 잘 나옴.
+        // fc-list소스를 분석하던가, ass에서 한글명이 되게 하던가...
+        // 아마 쉽기는 후자가 쉽겠지만, 전자가 될 가능성은 높은듯.
+        /* if(strcmp(font_property[1].value, "") != 0){
+            if(sami_tag_ass_font_face_tag(font_property[0].value, ass_color_tag_start) < 0){
+                return -1;
+            }
+
+            sami_ass_tag_set(ass_face_tag_start, text, "r", &ass_tag_font_face);
+        } */
+        //ass_tag = ass_tag_font_color + ass_tag_font_face;
+    // bold - operate OK, but 
+    }else if(strcasecmp(tag_stack_top->name, "b") == 0 ){
+        sami_ass_tag_set("b900", text, "b0", &ass_tag);
+    // ltalic - OK
+    }else if(strcasecmp(tag_stack_top->name, "i") == 0 ){
+        sami_ass_tag_set("i1", text, "i0", &ass_tag);
+    // underline - OK
+    }else if(strcasecmp(tag_stack_top->name, "u") == 0 ){
+        sami_ass_tag_set("u1", text, "u0", &ass_tag);
+    // strike - OK
+    }else if(strcasecmp(tag_stack_top->name, "s") == 0 ){
+        sami_ass_tag_set("s1", text, "s0", &ass_tag);
+    // ruby - OK (TODO: must be check "ruby" in tag stck)
+    // UP   : <ruby>주석을 달려는 자막<rt>주석</rt></ruby>
+    // DOWN : 주석을 달려는 자막<ruby><rt>주석</ft><ruby>
+    }/*  else if(strcasecmp(tag_stack_top->name, "rt") == 0 ){
+        sprintf(stack_ass_buffer, "{\\fs10}%s{\\r}", text);
+    } */
+
+    strcpy(stack_ass_buffer, ass_tag);
+    free(ass_tag);
+
+    return 0;
+}/*}}}*/
+
+// return 0         : empty text
+// return 1         : exist ass text
+// return -1 / -2   : only text
+int sami_tag_ass(void **tag_stack, const unsigned int tag_stack_max, char *plain_text, char *ass_buffer)
+{/*{{{*/
+    int i,
+        tag_stack_top_index;
+    char stack_ass_buffer[ASS_BUFFER_LENGTH_MAX * 2] = {0},
+         *stack_text;
+
+    if(strcmp(plain_text, "") == 0){
+        return 0;
+    }
+
+    switch((tag_stack_top_index = stack_top_get(tag_stack, NULL, tag_stack_max))){
+        case -1:
+            return -1;
+        case -2:
+            return -2;
+    }
+
+    stack_text = plain_text;
+
+    // stack is "FILO" therefore, get recursive order.
+    for(i = tag_stack_top_index;i >= 0;i --){
+        if(sami_tag_ass_text(tag_stack[i], stack_ass_buffer, stack_text) < 0){
+            return -3;
+        }
+
+        stack_text = stack_ass_buffer;
+    }
+    
+    strcpy(ass_buffer, stack_ass_buffer);
+    return 1;
+}
+/*}}}*/
+
 int sami_tag_parse_start(void **tag_stack, const unsigned int tag_stack_max, char *tag_name, char *tag_property_start_po, const int tag_property_flag)
 {/*{{{*/
     int tag_stack_top_index = -1;
@@ -840,8 +903,8 @@ int sami_tag_parse(void **tag_stack, const unsigned int tag_stack_max, char *sou
          *tag_name,
          *tag_property_start_po,
          text[TEXT_LINE_LENGTH_MAX]                 = {0},
-         ass_buffer[TEXT_LINE_LENGTH_MAX * 2]       = {0},
-         ass_buffer_cat[TEXT_LINE_LENGTH_MAX * 3]   = {0};
+         ass_buffer[ASS_BUFFER_LENGTH_MAX]          = {0},
+         ass_buffer_cat[ASS_BUFFER_CAT_LENGTH_MAX]  = {0};
     int  tag_type,
          tag_property_flag      = 0,
          tag_text_index         = 0;
