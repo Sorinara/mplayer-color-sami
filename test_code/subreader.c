@@ -17,8 +17,7 @@ char *subtitle_line[5000][16] = {{NULL}};
 typedef struct _Tag_Property{
     char *name,
          *value;
-    int  name_allocation,
-         value_allocation;
+
 } Tag_Property;
 
 typedef struct _Tag{
@@ -266,15 +265,11 @@ void sami_tag_stack_element_free(void *stack_element_void)
     element->name = NULL;
 
     for(stack_index = 0;stack_index < element->property_count;stack_index ++){
-        if(element->property[stack_index].name_allocation == 1){
-            free(element->property[stack_index].name);
-            fprintf(stderr, "[%s][%s(%d)] Free Property (%d) name (%p)\n", __TIME__, __FILE__, __LINE__, stack_index, element->property[stack_index].name);
-        }
+        free(element->property[stack_index].name);
+        fprintf(stderr, "[%s][%s(%d)] Free Property (%d) name (%p)\n", __TIME__, __FILE__, __LINE__, stack_index, element->property[stack_index].name);
 
-        if(element->property[stack_index].value_allocation == 1){
-            free(element->property[stack_index].value);
-            fprintf(stderr, "[%s][%s(%d)] Free Property (%d) value (%p)\n", __TIME__, __FILE__, __LINE__, stack_index, element->property[stack_index].value);
-        }
+        free(element->property[stack_index].value);
+        fprintf(stderr, "[%s][%s(%d)] Free Property (%d) value (%p)\n", __TIME__, __FILE__, __LINE__, stack_index, element->property[stack_index].value);
 
         element->property[stack_index].name     = NULL;
         element->property[stack_index].value    = NULL;
@@ -341,59 +336,6 @@ void sami_tag_stack_element_combine_property_check(const Tag *tag_source, const 
     }
 }/*}}}*/
 
-int sami_tag_stack_element_combine(const Tag *tag_source, const Tag *tag_target, Tag *tag_new)
-{/*{{{*/
-    int i,
-        property_name_match_flag,
-        property_value_match_flag,
-        new_tag_index,
-        new_tag_stack_top = 0;
-
-    if(strcasecmp(tag_source->name, tag_target->name) != 0){
-        return -1;
-    }
-
-    new_tag_stack_top = tag_source->property_count;
-
-    // copy tag_source to tag_new and initional allocation flag
-    // (not duplicate data is init 0)
-    for(i = 0;i < new_tag_stack_top;i++){
-        tag_new->property[i].name               = tag_source->property[i].name;
-        tag_new->property[i].value              = tag_source->property[i].value;
-        tag_new->property[i].name_allocation    = 0;
-        tag_new->property[i].value_allocation   = 0;
-    }
-    
-    for(i = 0;i < tag_target->property_count;i++){
-        sami_tag_stack_element_combine_property_check(tag_source, tag_target->property[i], &property_name_match_flag, &property_value_match_flag, &new_tag_stack_top, &new_tag_index);
-
-        switch(property_name_match_flag){
-            // new - (not exist element in stack - top)
-            case 0:
-                tag_new->property[new_tag_index].name               = strdup(tag_target->property[i].name);
-                tag_new->property[new_tag_index].value              = strdup(tag_target->property[i].value);
-                tag_new->property[new_tag_index].name_allocation    = 1;
-                tag_new->property[new_tag_index].value_allocation   = 1;
-                break;
-            // exist - only change value (don't touch name)
-            case 1:
-                // dismatch!
-                if(property_value_match_flag == 0){
-                    tag_new->property[new_tag_index].value              = strdup(tag_target->property[i].value);
-                    tag_new->property[new_tag_index].value_allocation   = 1;
-                }
-                break;
-        }
-        //fprintf(stderr, "[%s][%s(%d)] (%d) '%s' : %s\n", __TIME__, __FILE__, __LINE__, new_tag_index, tag_target->property[i].name, tag_target->property[i].value);
-    }
-
-    tag_new->property_count     = new_tag_stack_top;
-    tag_new->name               = tag_source->name;
-    tag_new->name_allocation    = 0;
-
-    return 0;
-}/*}}}*/
-
 void sami_tag_stack_print(void **stack_void, const unsigned int element_max_count, const char *message)
 {/*{{{*/
     Tag **stack;
@@ -417,7 +359,7 @@ void sami_tag_stack_print(void **stack_void, const unsigned int element_max_coun
         fprintf(stderr, "[%s][%s(%d)] %s (%d) : %s (%p)\n", __TIME__, __FILE__, __LINE__, "Stack Tag Name     ", stack_index, stack[stack_index]->name, stack[stack_index]->name);
 
         for(j = 0;j < stack[stack_index]->property_count;j ++){
-            fprintf(stderr, "[%s][%s(%d)] %s (%d/%d)         : { [%s](%d) = '%s'(%d) }\n", __TIME__, __FILE__, __LINE__, "-Property", j, stack[stack_index]->property_count, stack[stack_index]->property[j].name, stack[stack_index]->property[j].name_allocation, stack[stack_index]->property[j].value, stack[stack_index]->property[j].value_allocation);
+            fprintf(stderr, "[%s][%s(%d)] %s (%d/%d)         : { [%s] = '%s' }\n", __TIME__, __FILE__, __LINE__, "-Property", j, stack[stack_index]->property_count, stack[stack_index]->property[j].name, stack[stack_index]->property[j].value);
         }
     }
 
@@ -479,8 +421,7 @@ void sami_tag_property_get(const Tag *element, Tag_Property *font_property, cons
 
         for(j = 0;j < element->property_count;j ++){
             if(strcasecmp(font_property[i].name, element->property[j].name) == 0){
-                font_property[i].value              = element->property[j].value;
-                font_property[i].value_allocation   = 0;
+                font_property[i].value = element->property[j].value;
             }
         }
     }
@@ -603,8 +544,6 @@ int sami_tag_property_set(char *tag_property_start_po, Tag *element)
 
         element->property[property_count].name                = property_name;
         element->property[property_count].value               = property_value;
-        element->property[property_count].name_allocation     = 1;
-        element->property[property_count].value_allocation    = 1;
 
         property_po = property_value_next_po;
         property_count ++;
@@ -654,7 +593,8 @@ int sami_tag_ass_font_color_table(const char *color_name, char *color_buffer)
     return 0;
 }/*}}}*/
 
-int sami_tag_ass_font_color_tag(const char *color_value, char *ass_color_buffer)
+        
+int sami_tag_ass_font_color_tag(const char *color_value, char *ass_color_buffer, const unsigned int ass_color_buffer_length)
 {/*{{{*/
     // must be init 0
     char color_rgb_buffer[7]      = {0},
@@ -662,8 +602,7 @@ int sami_tag_ass_font_color_tag(const char *color_value, char *ass_color_buffer)
          *strtol_po;
     unsigned int color_rgb_number   = 0;
     int color_value_length          = 0,
-        color_value_length_valid    = 0,
-        ass_color_buffer_fix_length = 16;
+        color_value_length_valid    = 0;
 
     if(*color_value == '#'){
         color_value ++;
@@ -690,23 +629,44 @@ int sami_tag_ass_font_color_tag(const char *color_value, char *ass_color_buffer)
         memcpy(color_bgr_buffer + 4, color_rgb_buffer + 0, 2);
         color_rgb_number = strtol(color_bgr_buffer, NULL, 16);
 
-        memset(ass_color_buffer, 0, ass_color_buffer_fix_length);
-        snprintf(ass_color_buffer, ass_color_buffer_fix_length, "\\r\\c&H%06X&", color_rgb_number);
+        memset(ass_color_buffer, 0, ass_color_buffer_length);
+        snprintf(ass_color_buffer, ass_color_buffer_length, "{\\r\\c&H%06X&}", color_rgb_number);
     }
 
     return 0;
 }/*}}}*/
 
-/* int sami_tag_ass_font_face_tag()
+// face - only englist name, 한글이름은 바로깨짐.
+// 일단 fc-list에서 나오는 영문이름으로 하면 잘 나옴.
+// fc-list소스를 분석하던가, ass에서 한글명이 되게 하던가...
+// 아마 쉽기는 후자가 쉽겠지만, 전자가 될 가능성은 높은듯.
+int sami_tag_ass_font_face_tag(const char *face_value, char **ass_face)
 {
+    int face_value_length,
+        ass_face_tag_start_length;
 
-} */
+    if((face_value_length = strlen(face_value)) < 0){
+        return -1;
+    }
+
+    // strlen("{\\fn}") + '\0' == 6
+    ass_face_tag_start_length = face_value_length + 6;
+
+    if((*ass_face = calloc(sizeof(char), ass_face_tag_start_length)) == NULL){
+        return -2;
+    }
+
+    snprintf(*ass_face, ass_face_tag_start_length, "{\\fn%s}", face_value);
+
+    return 0;
+}
 
 int sami_ass_tag_set(const char *tag_start, const char *text, const char *tag_end, char **save_buffer)
 {/*{{{*/
     int tag_start_length,
         text_length,
-        tag_end_length;
+        tag_end_length,
+        tag_total_length;
 
     if((tag_start_length = strlen(tag_start)) < 0){
         return -1;
@@ -720,60 +680,107 @@ int sami_ass_tag_set(const char *tag_start, const char *text, const char *tag_en
         return -3;
     }
 
-    if((*save_buffer = calloc(1, tag_start_length + text_length + tag_end_length)) == NULL){
+    // 7 : save_buffer's basket length
+    // 1 : buffer '\0' length
+    tag_total_length = tag_start_length + text_length + tag_end_length + 1;
+
+    if((*save_buffer = calloc(sizeof(char), tag_total_length)) == NULL){
         return -4;
     }
 
-    snprintf(*save_buffer, tag_end_length, "{\\%s}%s{\\%s}", tag_start, text, tag_end);
+    snprintf(*save_buffer, tag_total_length, "%s%s%s", tag_start, text, tag_end);
 
     return 0;
 }/*}}}*/
 
-int sami_tag_ass_text(const Tag *tag_stack_top, char *stack_ass_buffer, const char *text)
+int sami_tag_ass_combine(const char *tag1, const char *tag2, char **save_buffer)
 {/*{{{*/
-    Tag_Property font_property[2];
-    char ass_color_tag_start[16],
-         *ass_tag;
+    int tag1_length,
+        tag2_length,
+        save_buffer_length = 0;
+
+    if(tag1 != NULL){
+        tag1_length = strlen(tag1);
+    }
+
+    if(tag2 != NULL){
+        tag2_length = strlen(tag2);
+    }
+
+    save_buffer_length = tag1_length + tag2_length;
+
+    if(save_buffer_length <= 0){
+        return -1;
+    }
+
+    if((*save_buffer = calloc(1, save_buffer_length)) == NULL){
+        return -2;
+    }
+
+    if(tag1 != NULL){
+        strcpy(*save_buffer, tag1);
+    } 
+
+    if(tag2 != NULL){
+        strcat(*save_buffer, tag2);
+    }
+
+    return 0;
+}/*}}}*/
+
+int sami_tag_ass_text(const Tag *tag_stack_top, char *stack_ass_buffer, char *text)
+{/*{{{*/
+    int i;
+    char ass_color_tag_start[18] = {0}, // ass color tag's size is fix 16 (add null)
+         *ass_face_tag_start    = NULL,
+         *ass_tag_start         = NULL,
+         ass_tag_font_end[9]    = {0},
+         *ass_tag_end           = NULL,
+         *ass_tag               = NULL;
 
     if(strcasecmp(tag_stack_top->name, "font") == 0 ){
-        memset(font_property, 0, sizeof(font_property));
-        font_property[0].name = "color";
-        font_property[1].name = "face";
+        for(i = 0;i < tag_stack_top->property_count;i ++){
+            if(strcasecmp(tag_stack_top->property[i].name, "color") != 0){
+                if(sami_tag_ass_font_color_tag(tag_stack_top->property[i].value, ass_color_tag_start, sizeof(ass_color_tag_start)) < 0){
+                    fprintf(stderr, "[%s] DEBUG LINE '%s' - (%s, Line:%d)\n", __TIME__, "OOOOOOOOOO", __FILE__, __LINE__);
+                    return -1;
+                }
 
-        sami_tag_property_get(tag_stack_top, font_property, 2);
+                strcat(ass_tag_font_end, "{\\r}");
+            }else if(strcasecmp(tag_stack_top->property[i].name, "face") != 0){
+                if(sami_tag_ass_font_face_tag(tag_stack_top->property[i].value, &ass_face_tag_start) < 0){
+                    return -2;
+                }
 
-        if(strcmp(font_property[0].value, "") != 0){
-            if(sami_tag_ass_font_color_tag(font_property[0].value, ass_color_tag_start) < 0){
-                return -1;
+                strcat(ass_tag_font_end, "{\\r}");
             }
-
-            sami_ass_tag_set(ass_color_tag_start, text, "r", &ass_tag);
         }
 
-        // face - only englist name, 한글이름은 바로깨짐.
-        // 일단 fc-list에서 나오는 영문이름으로 하면 잘 나옴.
-        // fc-list소스를 분석하던가, ass에서 한글명이 되게 하던가...
-        // 아마 쉽기는 후자가 쉽겠지만, 전자가 될 가능성은 높은듯.
-        /* if(strcmp(font_property[1].value, "") != 0){
-            if(sami_tag_ass_font_face_tag(font_property[0].value, ass_color_tag_start) < 0){
-                return -1;
-            }
+        fprintf(stderr, "3333 [%s] DEBUG LINE '%s' - (%s, Line:%d)\n", __TIME__, ass_face_tag_start, __FILE__, __LINE__);
 
-            sami_ass_tag_set(ass_face_tag_start, text, "r", &ass_tag_font_face);
-        } */
-        //ass_tag = ass_tag_font_color + ass_tag_font_face;
+        if(sami_tag_ass_combine(ass_color_tag_start, ass_face_tag_start, &ass_tag_start) < 0){
+            free(ass_face_tag_start);
+            return -3;
+        }
+
+        strcpy(ass_tag_end, ass_tag_font_end);
+        free(ass_face_tag_start);
     // bold - operate OK, but 
     }else if(strcasecmp(tag_stack_top->name, "b") == 0 ){
-        sami_ass_tag_set("b900", text, "b0", &ass_tag);
+        ass_tag_start   = "{\\b900}";
+        ass_tag_end     = "{\\b0}";
     // ltalic - OK
     }else if(strcasecmp(tag_stack_top->name, "i") == 0 ){
-        sami_ass_tag_set("i1", text, "i0", &ass_tag);
+        ass_tag_start   = "{\\i1}";
+        ass_tag_end     = "{\\i0}";
     // underline - OK
     }else if(strcasecmp(tag_stack_top->name, "u") == 0 ){
-        sami_ass_tag_set("u1", text, "u0", &ass_tag);
+        ass_tag_start   = "{\\u1}";
+        ass_tag_end     = "{\\u0}";
     // strike - OK
     }else if(strcasecmp(tag_stack_top->name, "s") == 0 ){
-        sami_ass_tag_set("s1", text, "s0", &ass_tag);
+        ass_tag_start   = "{\\s1}";
+        ass_tag_end     = "{\\s0}";
     // ruby - OK (TODO: must be check "ruby" in tag stck)
     // UP   : <ruby>주석을 달려는 자막<rt>주석</rt></ruby>
     // DOWN : 주석을 달려는 자막<ruby><rt>주석</ft><ruby>
@@ -781,8 +788,19 @@ int sami_tag_ass_text(const Tag *tag_stack_top, char *stack_ass_buffer, const ch
         sprintf(stack_ass_buffer, "{\\fs10}%s{\\r}", text);
     } */
 
-    strcpy(stack_ass_buffer, ass_tag);
-    free(ass_tag);
+    fprintf(stderr, "[%s] YYYY DEBUG LINE '%s' - (%s, Line:%d)\n", __TIME__, ass_tag_start, __FILE__, __LINE__);
+
+    // TODO: memory free
+    if(sami_ass_tag_set(ass_tag_start, text, ass_tag_end, &ass_tag) < 0){
+        //free(ass_tag_font_start);
+        return -4;
+    }
+
+    if(ass_tag != NULL){
+        fprintf(stderr, "[%s] XXX DEBUG LINE '%s' - (%s, Line:%d)\n", __TIME__, ass_tag, __FILE__, __LINE__);
+        strcpy(stack_ass_buffer, ass_tag);
+        free(ass_tag);
+    }
 
     return 0;
 }/*}}}*/
@@ -794,8 +812,7 @@ int sami_tag_ass(void **tag_stack, const unsigned int tag_stack_max, char *plain
 {/*{{{*/
     int i,
         tag_stack_top_index;
-    char stack_ass_buffer[ASS_BUFFER_LENGTH_MAX * 2] = {0},
-         *stack_text;
+    char stack_ass_buffer[ASS_BUFFER_LENGTH_MAX * 2] = {0};
 
     if(strcmp(plain_text, "") == 0){
         return 0;
@@ -826,13 +843,10 @@ int sami_tag_ass(void **tag_stack, const unsigned int tag_stack_max, char *plain
 
 int sami_tag_parse_start(void **tag_stack, const unsigned int tag_stack_max, char *tag_name, char *tag_property_start_po, const int tag_property_flag)
 {/*{{{*/
-    int tag_stack_top_index = -1;
-    Tag  tag_stack_element_now,
-         tag_stack_element_push;
+    Tag  tag_stack_element_now;
 
     // initinal
     tag_stack_element_now.name              = strdup(tag_name);
-    tag_stack_element_now.name_allocation   = 1;
     tag_stack_element_now.property_count    = 0;
 
     if(tag_property_flag == 1){
@@ -843,15 +857,7 @@ int sami_tag_parse_start(void **tag_stack, const unsigned int tag_stack_max, cha
         }
     }
 
-    if((tag_stack_top_index = sami_tag_stack_name_search(tag_stack, tag_stack_element_now.name, tag_stack_max)) >= 0){
-        // matched tag name, not check exception
-        sami_tag_stack_element_combine(tag_stack[tag_stack_top_index], &tag_stack_element_now, &tag_stack_element_push);
-        sami_tag_stack_element_free(&tag_stack_element_now);
-    }else{
-        tag_stack_element_push = tag_stack_element_now;
-    }
-
-    if(stack_push(tag_stack, &tag_stack_element_push, sizeof(Tag), tag_stack_max) < 0){
+    if(stack_push(tag_stack, &tag_stack_element_now, sizeof(Tag), tag_stack_max) < 0){
         fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Stack Push Failed");
         sami_tag_stack_element_free(&tag_stack_element_now);
         return -2;
@@ -965,12 +971,14 @@ int sami_tag_parse(void **tag_stack, const unsigned int tag_stack_max, char *sou
     // check last string
     switch(sami_tag_ass(tag_stack, tag_stack_max, text, ass_buffer)){
         case 0:
+            fprintf(stderr, "[%s] DEBUG LINE '%s' - (%s, Line:%d)\n", __TIME__, "A", __FILE__, __LINE__);
             break;
         case 1:
             strcat(ass_buffer_cat, ass_buffer);
             break;
         default:
             // only text
+            fprintf(stderr, "[%s] DEBUG LINE '%s' - (%s, Line:%d)\n", __TIME__, "C", __FILE__, __LINE__);
             strcat(ass_buffer_cat, text);
             break;
     }
