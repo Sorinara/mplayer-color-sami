@@ -306,7 +306,39 @@ int sami_tag_stack_name_search(void **stack_void, const char *tag_name, const un
     return match_index;
 }/*}}}*/
 
-void sami_tag_stack_element_combine_property_check(const Tag *tag_source, const Tag_Property tag_target_property, int *property_name_match_flag, int *property_value_match_flag, int *stack_top_element, int *stack_index_match)
+int sami_tag_stack_element_combine_check_name(Tag **tag_stack, Tag *tag_stack_accrue, int *tag_name_match_flag, int *tag_value_match_flag, int *stack_top_element, int *stack_index_match)
+{/*{{{*/
+    int tag_stack_index;
+
+    *tag_name_match_flag   = 0;
+    *tag_value_match_flag  = 0;
+
+    for(tag_stack_index = 0;tag_stack_index < tag_stack_max && tag_stack[tag_stack_index] != NULL;tag_stack_index ++){
+        if(strcasecmp(tag_stack[tag_stack_index]->name, tag_stack_accrue->name) == 0){
+            *tag_name_match_flag = 1;
+
+            if(strcasecmp(tag_stack[tag_stack_index]->value, tag_stack_accrue->value) == 0){
+                *tag_value_match_flag = 1;
+            }
+
+            break;
+        }
+    }
+
+    switch(*tag_name_match_flag){
+        case 0:
+            *stack_index_match = *stack_top_element;
+            (*stack_top_element) ++;
+            break;
+        case 1: 
+            *stack_index_match = tag_stack_index;
+            break;
+    }
+
+    return 0;
+}/*}}}*/
+
+void sami_tag_stack_element_combine_check_property(const Tag *tag_source, const Tag_Property tag_target_property, int *property_name_match_flag, int *property_value_match_flag, int *stack_top_element, int *stack_index_match)
 {/*{{{*/
     int property_index;
 
@@ -728,42 +760,70 @@ int sami_tag_ass_combine(const char *tag1, const char *tag2, char **save_buffer)
     return 0;
 }/*}}}*/
 
-int sami_tag_ass_text(const Tag *tag_stack_top, char *stack_ass_buffer, char *text)
-{/*{{{*/
+int sami_tag_stack_accrue(Tag **tag_stack, Tag **tag_stack_accrue, const unsigned int tag_stack_max)
+{
+    int i,
+        j,
+        tag_name_match_flag,
+        tag_value_match_flag,
+        tag_stack_index_match;
+    Tag tag_stack_selected;
+
+
+    for(i = 0;i < count;i++){
+        sami_tag_stack_element_combine_check_name(tag_stack, tag_stack_accrue[i], &tag_name_match_flag, &tag_value_match_flag, &tag_stack_top_index, &tag_stack_index_match);
+
+        tag_stack_selected = tag_stack[i];
+
+        switch(tag_name_match_flag){
+            case 0:
+                tag_stack_accrue[tag_stack_index_match] = tag_stack_selected;
+                break;
+            case 1:
+                for(j = 0;j < tag_stack_selected.property_count;j ++){
+                    sami_tag_stack_element_combine_check_property();
+                }
+                
+                break;
+        }
+    }
+    
+}
+
+int sami_tag_ass_convert_tag()
+{
     int i;
     char ass_color_tag_start[18] = {0}, // ass color tag's size is fix 16 (add null)
          *ass_face_tag_start    = NULL,
          *ass_tag_start         = NULL,
-         ass_tag_font_end[9]    = {0},
-         *ass_tag_end           = NULL,
-         *ass_tag               = NULL;
+         ass_tag_end_font[9]    = {0},
+         *ass_tag_end           = NULL;
+    int ass_tag_start_allocate  = 0;
 
     if(strcasecmp(tag_stack_top->name, "font") == 0 ){
         for(i = 0;i < tag_stack_top->property_count;i ++){
             if(strcasecmp(tag_stack_top->property[i].name, "color") != 0){
                 if(sami_tag_ass_font_color_tag(tag_stack_top->property[i].value, ass_color_tag_start, sizeof(ass_color_tag_start)) < 0){
-                    fprintf(stderr, "[%s] DEBUG LINE '%s' - (%s, Line:%d)\n", __TIME__, "OOOOOOOOOO", __FILE__, __LINE__);
                     return -1;
                 }
 
-                strcat(ass_tag_font_end, "{\\r}");
+                strcat(ass_tag_end_font, "{\\r}");
             }else if(strcasecmp(tag_stack_top->property[i].name, "face") != 0){
                 if(sami_tag_ass_font_face_tag(tag_stack_top->property[i].value, &ass_face_tag_start) < 0){
                     return -2;
                 }
 
-                strcat(ass_tag_font_end, "{\\r}");
+                strcat(ass_tag_end_font, "{\\r}");
             }
         }
-
-        fprintf(stderr, "3333 [%s] DEBUG LINE '%s' - (%s, Line:%d)\n", __TIME__, ass_face_tag_start, __FILE__, __LINE__);
 
         if(sami_tag_ass_combine(ass_color_tag_start, ass_face_tag_start, &ass_tag_start) < 0){
             free(ass_face_tag_start);
             return -3;
         }
 
-        strcpy(ass_tag_end, ass_tag_font_end);
+        ass_tag_start_allocate = 1;
+        strcpy(ass_tag_end, ass_tag_end_font);
         free(ass_face_tag_start);
     // bold - operate OK, but 
     }else if(strcasecmp(tag_stack_top->name, "b") == 0 ){
@@ -785,21 +845,23 @@ int sami_tag_ass_text(const Tag *tag_stack_top, char *stack_ass_buffer, char *te
     // UP   : <ruby>주석을 달려는 자막<rt>주석</rt></ruby>
     // DOWN : 주석을 달려는 자막<ruby><rt>주석</ft><ruby>
     }/*  else if(strcasecmp(tag_stack_top->name, "rt") == 0 ){
-        sprintf(stack_ass_buffer, "{\\fs10}%s{\\r}", text);
+        sprintf(ass_tag_buffer, "{\\fs10}%s{\\r}", text);
     } */
 
-    fprintf(stderr, "[%s] YYYY DEBUG LINE '%s' - (%s, Line:%d)\n", __TIME__, ass_tag_start, __FILE__, __LINE__);
+}
 
+int sami_tag_ass_convert(const Tag *tag_stack_top, char **ass_tag, char *text)
+{/*{{{*/
+    int i;
+
+    for(i = 0;i < count;i++){
+        sami_tag_ass_convert_tag();
+    }
+    
     // TODO: memory free
     if(sami_ass_tag_set(ass_tag_start, text, ass_tag_end, &ass_tag) < 0){
         //free(ass_tag_font_start);
         return -4;
-    }
-
-    if(ass_tag != NULL){
-        fprintf(stderr, "[%s] XXX DEBUG LINE '%s' - (%s, Line:%d)\n", __TIME__, ass_tag, __FILE__, __LINE__);
-        strcpy(stack_ass_buffer, ass_tag);
-        free(ass_tag);
     }
 
     return 0;
@@ -810,32 +872,21 @@ int sami_tag_ass_text(const Tag *tag_stack_top, char *stack_ass_buffer, char *te
 // return -1 / -2   : only text
 int sami_tag_ass(void **tag_stack, const unsigned int tag_stack_max, char *plain_text, char *ass_buffer)
 {/*{{{*/
-    int i,
-        tag_stack_top_index;
-    char stack_ass_buffer[ASS_BUFFER_LENGTH_MAX * 2] = {0};
+    int i;
+    void *tag_stack_accrue[TAG_STACK_MAX] = {NULL};
 
     if(strcmp(plain_text, "") == 0){
         return 0;
     }
 
-    switch((tag_stack_top_index = stack_top_get(tag_stack, NULL, tag_stack_max))){
-        case -1:
-            return -1;
-        case -2:
-            return -2;
+    if(sami_tag_stack_accrue(tag_stack, tag_stack_accrue, tag_stack_max) < 0){
+        return -3;
     }
 
-    stack_text = plain_text;
-
-    // stack is "FILO" therefore, get recursive order.
-    for(i = tag_stack_top_index;i >= 0;i --){
-        if(sami_tag_ass_text(tag_stack[i], stack_ass_buffer, stack_text) < 0){
-            return -3;
-        }
-
-        stack_text = stack_ass_buffer;
+    if(sami_tag_ass_convert(tag_stack_accrue, stack_ass_buffer, text) < 0){
+        return -3;
     }
-    
+
     strcpy(ass_buffer, stack_ass_buffer);
     return 1;
 }
