@@ -14,6 +14,13 @@
 
 char *subtitle_line[5000][16] = {{NULL}};
 
+typedef struct _Stack{
+   void **element;
+
+   unsigned int element_max,
+                sp;
+} Stack;
+
 typedef struct _Tag_Property{
     char *name,
          *value;
@@ -28,12 +35,19 @@ typedef struct _Tag{
     Tag_Property property[TAG_PROPERTY_MAX];
 } Tag;
 
-int stack_top_index_get(void **stack, const unsigned int element_max_count)
+int stack_init(Stack *stack, const unsigned int element_max)
+{
+    stack->element_max  = element_max;
+    stack->sp           = 0;
+    stack->element      = NULL;
+}
+
+int stack_top_index_get(Stack stack)
 {/*{{{*/
     int stack_index;
 
-    for(stack_index = 0;stack_index < element_max_count;stack_index ++){
-        if(stack[stack_index] == NULL){
+    for(stack_index = 0;stack_index < stack.element_max;stack_index ++){
+        if(stack.element[stack_index] == NULL){
             break;
         }
     }
@@ -46,7 +60,7 @@ int stack_top_index_get(void **stack, const unsigned int element_max_count)
     }
 
     // full
-    if(stack_index == element_max_count){
+    if(stack_index == stack.element_max){
         return -2;
     }
 
@@ -306,36 +320,23 @@ int sami_tag_stack_name_search(void **stack_void, const char *tag_name, const un
     return match_index;
 }/*}}}*/
 
-int sami_tag_stack_element_combine_check_name(Tag **tag_stack, Tag *tag_stack_accrue, int *tag_name_match_flag, int *tag_value_match_flag, int *stack_top_element, int *stack_index_match)
+void sami_tag_stack_element_overlap(Tag *tag_stack_element, const unsigned int tag_stack_element_max, Tag **tag_stack_accrue, int *tag_name_match_flag, int *tag_stack_match_index)
 {/*{{{*/
     int tag_stack_index;
 
     *tag_name_match_flag   = 0;
-    *tag_value_match_flag  = 0;
+    *tag_stack_match_index = -1;
 
-    for(tag_stack_index = 0;tag_stack_index < tag_stack_max && tag_stack[tag_stack_index] != NULL;tag_stack_index ++){
-        if(strcasecmp(tag_stack[tag_stack_index]->name, tag_stack_accrue->name) == 0){
+    for(tag_stack_index = 0;tag_stack_index < tag_stack_element_max;tag_stack_index ++){
+        if(strcasecmp(tag_stack_accrue[tag_stack_index]->name, tag_stack_element->name) == 0){
             *tag_name_match_flag = 1;
-
-            if(strcasecmp(tag_stack[tag_stack_index]->value, tag_stack_accrue->value) == 0){
-                *tag_value_match_flag = 1;
-            }
-
             break;
         }
     }
 
-    switch(*tag_name_match_flag){
-        case 0:
-            *stack_index_match = *stack_top_element;
-            (*stack_top_element) ++;
-            break;
-        case 1: 
-            *stack_index_match = tag_stack_index;
-            break;
+    if(*tag_name_match_flag == 1){
+        *tag_stack_match_index = tag_stack_index;
     }
-
-    return 0;
 }/*}}}*/
 
 void sami_tag_stack_element_combine_check_property(const Tag *tag_source, const Tag_Property tag_target_property, int *property_name_match_flag, int *property_value_match_flag, int *stack_top_element, int *stack_index_match)
@@ -760,27 +761,24 @@ int sami_tag_ass_combine(const char *tag1, const char *tag2, char **save_buffer)
     return 0;
 }/*}}}*/
 
-int sami_tag_stack_accrue(Tag **tag_stack, Tag **tag_stack_accrue, const unsigned int tag_stack_max)
+int sami_tag_stack_accrue(Tag **tag_stack, const unsigned int tag_stack_max, Tag **tag_stack_accrue)
 {
     int i,
         j,
         tag_name_match_flag,
-        tag_value_match_flag,
-        tag_stack_index_match;
-    Tag tag_stack_selected;
+        tag_stack_match_index,
+        tag_stack_accrue_index = 0;
 
-
-    for(i = 0;i < count;i++){
-        sami_tag_stack_element_combine_check_name(tag_stack, tag_stack_accrue[i], &tag_name_match_flag, &tag_value_match_flag, &tag_stack_top_index, &tag_stack_index_match);
-
-        tag_stack_selected = tag_stack[i];
+    for(i = 0;i < tag_stack_max && tag_stack[i] != NULL;i++){
+        sami_tag_stack_element_overlap(tag_stack[i], tag_stack_accrue, &tag_name_match_flag, &tag_stack_match_index);
 
         switch(tag_name_match_flag){
             case 0:
-                tag_stack_accrue[tag_stack_index_match] = tag_stack_selected;
+                tag_stack_accrue[tag_stack_accrue_index] = tag_stack[i];
+                tag_stack_accrue_index ++;
                 break;
             case 1:
-                for(j = 0;j < tag_stack_selected.property_count;j ++){
+                for(j = 0;j < tag_stack_accrue[i].property_count;j ++){
                     sami_tag_stack_element_combine_check_property();
                 }
                 
@@ -879,7 +877,7 @@ int sami_tag_ass(void **tag_stack, const unsigned int tag_stack_max, char *plain
         return 0;
     }
 
-    if(sami_tag_stack_accrue(tag_stack, tag_stack_accrue, tag_stack_max) < 0){
+    if(sami_tag_stack_accrue(tag_stack, tag_stack_max, tag_stack_accrue) < 0){
         return -3;
     }
 
