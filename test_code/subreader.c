@@ -14,13 +14,20 @@
 
 char *subtitle_line[5000][16] = {{NULL}};
 
-typedef struct _Stack{
+typedef struct _List{
    void **element;
 
    unsigned int element_size,
                 element_max,
-                sp;
-} Stack;
+                lp;
+} List;
+
+typedef struct _Table{
+    List *list;
+
+    unsigned int table_max,
+                 tp;
+} Table;
 
 typedef struct _Tag_Property{
     char *name,
@@ -36,33 +43,33 @@ typedef struct _Tag{
     Tag_Property property[TAG_PROPERTY_MAX];
 } Tag;
 
-int stack_element_create(Stack *stack, const unsigned int element_max)
+int list_element_create(List *list, const unsigned int element_max)
 {/*{{{*/
-    if((stack->element = (void **)calloc(element_max, sizeof(void*))) == NULL){
+    if((list->element = (void **)calloc(element_max, sizeof(void*))) == NULL){
         return -1;
     }
 
     return 0;
 }/*}}}*/
 
-void stack_element_get(const Stack stack, const unsigned int index, void **element)
+void list_element_get(const List list, const unsigned int index, void **element)
 {/*{{{*/
-    *element = stack.element[index];
+    *element = list.element[index];
 }/*}}}*/
 
-void stack_element_free(Stack stack, const unsigned int index)
+void list_element_free(List list, const unsigned int index)
 {/*{{{*/
-    free(stack.element[index]);
-    stack.element[index] = NULL;
+    free(list.element[index]);
+    list.element[index] = NULL;
 }/*}}}*/
 
-void stack_element_print(const Stack stack, const unsigned int index)
+void list_element_print(const List list, const unsigned int index)
 {/*{{{*/
     // Warnning: do not check over/underflow
-    fprintf(stderr, "Stack Print { element[%d] = '%p' }\n", index, stack.element[index]);
+    fprintf(stderr, "List Print { element[%d] = '%p' }\n", index, list.element[index]);
 }/*}}}*/
 
-int stack_init(Stack *stack, const unsigned int element_size, const unsigned int element_max)
+int list_init(List *list, const unsigned int element_size, const unsigned int element_max)
 {/*{{{*/
 
     if(element_size == 0){
@@ -73,52 +80,76 @@ int stack_init(Stack *stack, const unsigned int element_size, const unsigned int
         return -2;
     }
 
-    if(stack_element_create(stack, element_max) < 0){
+    if(list_element_create(list, element_max) < 0){
         return -3;
     }
 
-    stack->sp           = 0;
-    stack->element_size = element_size;
-    stack->element_max  = element_max;
+    list->lp           = 0;
+    list->element_size = element_size;
+    list->element_max  = element_max;
 
     return 0;
 }/*}}}*/
 
-void stack_free(Stack stack, void (*user_struct_free)(void*))
+// if user_uniq_check() is return 0 : ignore
+//                         return 1 : insert in list_dest
+void list_uniq(List list_source, int (*user_uniq_check)(List, int), List *list_dest)
+{
+    int i,
+        list_dest_lp;
+
+    for(i = 0;i < list_source.lp;i ++){
+        if(user_uniq_check(list, i) == 1){
+            list_dest->element[list_dest_lp] = list_source.element[i];
+            list_dest_lp ++;
+        }
+    }
+
+    list_dest->lp = list_dest_lp;
+}
+
+// if user_duplication_check() is return 0 : ignore
+//                                return 1 : pile in table_dest
+void list_duplication_pile(List table_source, int (*user_duplication_check)(List, List), Table *table_dest)
+{
+
+}
+
+void list_free(List list, void (*user_struct_free)(void*))
 {/*{{{*/
     int i;
 
-    for(i= 0;i < stack.sp;i ++){
-        stack_element_print(stack, i);
-        user_struct_free(stack.element[i]);
-        stack_element_free(stack, i);
+    for(i= 0;i < list.lp;i ++){
+        list_element_print(list, i);
+        user_struct_free(list.element[i]);
+        list_element_free(list, i);
     }
 
-    free(stack.element);
+    free(list.element);
 }/*}}}*/
 
-int stack_top_index_get(const Stack stack)
+int stack_top_index_get(const List list)
 {/*{{{*/
     // empty
-    if(stack.sp == 0){
+    if(list.lp == 0){
         return -1;
     }
 
     // full
-    if(stack.sp == stack.element_max){
+    if(list.lp == list.element_max){
         return -2;
     }
 
-    return stack.sp;
+    return list.lp;
 }/*}}}*/
 
-// get pointer in stack, not data structure !
-int stack_top_get(const Stack stack, void **element)
+// get pointer in list, not data structure !
+int stack_top_get(const List list, void **element)
 {/*{{{*/
-    int stack_top_index;
+    int sp;
 
     // check overflow
-    switch((stack_top_index = stack_top_index_get(stack))){
+    switch((sp = stack_top_index_get(list))){
         case -1:
             return -1;
         case -2:
@@ -126,50 +157,50 @@ int stack_top_get(const Stack stack, void **element)
     }
 
     if(element != NULL){
-        stack_element_get(stack, stack_top_index, element);
+        list_element_get(list, sp, element);
     }
 
-    return stack_top_index;
+    return sp;
 }/*}}}*/
 
-// top position in stack, memory allocation
-int stack_push(Stack stack, const void *element, const unsigned int element_size)
+// top position in list, memory allocation
+int stack_push(List list, const void *element, const unsigned int element_size)
 {/*{{{*/
-    int stack_top_index;
+    int sp;
 
     // check overflow (do not check empty !)
-    if((stack_top_index = stack_top_index_get(stack)) == -2){
+    if((sp = stack_top_index_get(list)) == -2){
         return -1;
     }
 
-    if((stack.element[stack_top_index + 1] = calloc(1, element_size)) == NULL){
+    if((list.element[sp + 1] = calloc(1, element_size)) == NULL){
         return -2;
     }
 
-    //fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s' (%p)\n", __TIME__,  __FILE__, __LINE__, "Element Allocated", stack[stack_top_index + 1]);
-    memcpy(stack.element[stack_top_index + 1], element, element_size);
+    //fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s' (%p)\n", __TIME__,  __FILE__, __LINE__, "Element Allocated", list[sp + 1]);
+    memcpy(list.element[sp + 1], element, element_size);
 
-    stack.sp ++;
+    list.lp ++;
 
     return 0;
 }/*}}}*/
 
-// remove only, if you want get element in stack, use "stack_top_get()"
-int stack_pop(Stack stack, void (*user_struct_free)(void*))
+// remove only, if you want get element in list, use "stack_top_get()"
+int stack_pop(List list, void (*user_struct_free)(void*))
 {/*{{{*/
 
     // check underflow (do not check empty !)
-    if(stack_top_index_get(stack) == -1){
+    if(stack_top_index_get(list) == -1){
         return -1;
     }
 
-    user_struct_free(stack.element[stack.sp]);
-    //fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s' (%d) (%p)\n", __TIME__,  __FILE__, __LINE__, "Stack Element Free", index, stack[index]);
-    free(stack.element[stack.sp]);
+    user_struct_free(list.element[list.lp]);
+    //fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s' (%d) (%p)\n", __TIME__,  __FILE__, __LINE__, "List Element Free", index, list[index]);
+    free(list.element[list.lp]);
 
-    //fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s'\n", __TIME__,  __FILE__, __LINE__, "Stack Element Free - Done");
-    stack.element[stack.sp] = NULL;
-    stack.sp --;
+    //fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s'\n", __TIME__,  __FILE__, __LINE__, "List Element Free - Done");
+    list.element[list.lp] = NULL;
+    list.lp --;
 
     return 0;
 }/*}}}*/
@@ -302,13 +333,13 @@ int strstripdup(char *string, char **strip_string)
     return strip_string_length;
 }/*}}}*/
 
-void sami_tag_stack_element_free(void *stack_element_void)
+void sami_tag_list_element_free(void *list_element_void)
 {/*{{{*/
-    int stack_index;
+    int i;
     Tag *element;
 
-    // for stack's function
-    element = (Tag *)stack_element_void;
+    // for list's function
+    element = (Tag *)list_element_void;
 
     if(element->name_allocation == 1){
         //fprintf(stderr, "[%s][%s(%d)] Tag Name Allocation (%d) : '%s' '%p'\n", __TIME__, __FILE__, __LINE__, element->name_allocation, element->name, element->name);
@@ -318,42 +349,43 @@ void sami_tag_stack_element_free(void *stack_element_void)
 
     element->name = NULL;
 
-    for(stack_index = 0;stack_index < element->property_count;stack_index ++){
-        free(element->property[stack_index].name);
-        fprintf(stderr, "[%s][%s(%d)] Free Property (%d) name (%p)\n", __TIME__, __FILE__, __LINE__, stack_index, element->property[stack_index].name);
+    for(i = 0;i < element->property_count;i ++){
+        free(element->property[i].name);
+        fprintf(stderr, "[%s][%s(%d)] Free Property (%d) name (%p)\n", __TIME__, __FILE__, __LINE__, i, element->property[i].name);
 
-        free(element->property[stack_index].value);
-        fprintf(stderr, "[%s][%s(%d)] Free Property (%d) value (%p)\n", __TIME__, __FILE__, __LINE__, stack_index, element->property[stack_index].value);
+        free(element->property[i].value);
+        fprintf(stderr, "[%s][%s(%d)] Free Property (%d) value (%p)\n", __TIME__, __FILE__, __LINE__, i, element->property[i].value);
 
-        element->property[stack_index].name     = NULL;
-        element->property[stack_index].value    = NULL;
+        element->property[i].name     = NULL;
+        element->property[i].value    = NULL;
     }
 
     element->property_count = 0;
 }/*}}}*/
 
-void sami_tag_stack_element_overlap(Tag *tag_stack_element, Stack *tag_stack_accrue, int *tag_name_match_flag, int *tag_stack_match_index)
+void sami_tag_list_element_check(Tag *tag_list_element, List tag_list_accrue, int *tag_name_match_flag, int *tag_list_match_index)
 {/*{{{*/
-    int tag_stack_index;
-    Tag *tag_stack_accrue_element; 
+    int tag_list_index;
+    Tag *tag_list_accrue_element; 
+
     *tag_name_match_flag   = 0;
-    *tag_stack_match_index = -1;
+    *tag_list_match_index = -1;
 
-    for(tag_stack_index = 0;tag_stack_index < tag_stack_accrue->sp;tag_stack_index ++){
-        tag_stack_accrue_element = (Tag *)tag_stack_accrue->element[tag_stack_index];
+    for(tag_list_index = 0;tag_list_index < tag_list_accrue.lp;tag_list_index ++){
+        list_element_get(tag_list_accrue, tag_list_index, (void *)&tag_list_accrue_element);
 
-        if(strcasecmp(tag_stack_accrue_element->name, tag_stack_element->name) == 0){
+        if(strcasecmp(tag_list_accrue_element->name, tag_list_element->name) == 0){
             *tag_name_match_flag = 1;
             break;
         }
     }
 
     if(*tag_name_match_flag == 1){
-        *tag_stack_match_index = tag_stack_index;
+        *tag_list_match_index = tag_list_index;
     }
 }/*}}}*/
 
-void sami_tag_stack_element_combine_check_property(const Tag *tag_source, const Tag_Property tag_target_property, int *property_name_match_flag, int *property_value_match_flag, int *stack_top_element, int *stack_index_match)
+void sami_tag_list_element_combine_check_property(const Tag *tag_source, const Tag_Property tag_dest_property, int *property_name_match_flag, int *property_value_match_flag, int *list_top_element, int *list_index_match)
 {/*{{{*/
     int property_index;
 
@@ -361,10 +393,10 @@ void sami_tag_stack_element_combine_check_property(const Tag *tag_source, const 
     *property_value_match_flag  = 0;
 
     for(property_index = 0;property_index < tag_source->property_count;property_index ++){
-        if(strcasecmp(tag_source->property[property_index].name, tag_target_property.name) == 0){
+        if(strcasecmp(tag_source->property[property_index].name, tag_dest_property.name) == 0){
             *property_name_match_flag = 1;
 
-            if(strcasecmp(tag_source->property[property_index].value, tag_target_property.value) == 0){
+            if(strcasecmp(tag_source->property[property_index].value, tag_dest_property.value) == 0){
                 *property_value_match_flag = 1;
             }
 
@@ -374,44 +406,44 @@ void sami_tag_stack_element_combine_check_property(const Tag *tag_source, const 
 
     switch(*property_name_match_flag){
         case 0:
-            *stack_index_match = *stack_top_element;
-            (*stack_top_element) ++;
+            *list_index_match = *list_top_element;
+            (*list_top_element) ++;
             break;
         case 1: 
-            *stack_index_match = property_index;
+            *list_index_match = property_index;
             break;
     }
 }/*}}}*/
 
-int sami_tag_stack_print(Stack stack, const char *message)
+int sami_tag_list_print(List list, const char *message)
 {/*{{{*/
-    int stack_element_index,
-        stack_element_property_index;
-    Tag *stack_element;
+    int i,
+        list_element_property_index;
+    Tag *list_element;
 
     fprintf(stderr, "[%s][%s(%d)] %s\n", __TIME__, __FILE__, __LINE__, message);
 
-    if(stack.sp == 0){
-        fprintf(stderr, "[%s][%s(%d)] %s\n", __TIME__, __FILE__, __LINE__, "Stack Empty");
+    if(list.lp == 0){
+        fprintf(stderr, "[%s][%s(%d)] %s\n", __TIME__, __FILE__, __LINE__, "List Empty");
         return -1;
     }
 
-    if(stack.sp == stack.element_max){
-        fprintf(stderr, "[%s][%s(%d)] %s\n", __TIME__, __FILE__, __LINE__, "Stack Full");
+    if(list.lp == list.element_max){
+        fprintf(stderr, "[%s][%s(%d)] %s\n", __TIME__, __FILE__, __LINE__, "List Full");
         return -2;
     }
 
-    for(stack_element_index = 0;stack_element_index < stack.sp;stack_element_index ++){
-        stack_element_get(stack, stack_element_index, (void *)&stack_element);
+    for(i = 0;i < list.lp;i ++){
+        list_element_get(list, i, (void *)&list_element);
 
-        fprintf(stderr, "[%s][%s(%d)] %s (%d) : %s (%p)\n", __TIME__, __FILE__, __LINE__, "Stack Tag Name     ", stack_element_index, stack_element->name, stack_element->name);
+        fprintf(stderr, "[%s][%s(%d)] %s (%d) : %s (%p)\n", __TIME__, __FILE__, __LINE__, "List Tag Name     ", i, list_element->name, list_element->name);
 
-        for(stack_element_property_index = 0;stack_element_property_index < stack_element->property_count;stack_element_property_index ++){
+        for(list_element_property_index = 0;list_element_property_index < list_element->property_count;list_element_property_index ++){
             fprintf(stderr, "[%s][%s(%d)] %s (%d/%d)         : { [%s] = '%s' }\n", __TIME__, __FILE__, __LINE__, "-Property",\
-                                                                                                                 stack_element_property_index,\
-                                                                                                                 stack_element->property_count,\
-                                                                                                                 stack_element->property[stack_element_property_index].name,\
-                                                                                                                 stack_element->property[stack_element_property_index].value);
+                                                                                                                 list_element_property_index,\
+                                                                                                                 list_element->property_count,\
+                                                                                                                 list_element->property[list_element_property_index].name,\
+                                                                                                                 list_element->property[list_element_property_index].value);
         }
     }
 
@@ -778,32 +810,33 @@ int sami_tag_ass_combine(const char *tag1, const char *tag2, char **save_buffer)
     return 0;
 }/*}}}*/
 
-int sami_tag_stack_accrue(Stack tag_stack, const unsigned int tag_stack_max, Stack *tag_stack_accrue)
+int sami_tag_list_accrue(List tag_list, List *tag_list_accrue)
 {/*{{{*/
     int i,
-        j,
+        //j,
         tag_name_match_flag,
-        tag_stack_match_index,
-    Tag *tag_stack_element,
-        *tag_stack_accrue_element;
+        tag_list_match_index;
+    Tag *tag_list_element;
+        //*tag_list_accrue_element;
 
-    for(i = 0;i < tag_stack.sp;i++){
-        stack_element_get(tag_stack, i, (void **)&tag_stack_element);
-        sami_tag_stack_element_overlap(tag_stack_element, tag_stack_accrue, &tag_name_match_flag, &tag_stack_match_index);
+    for(i = 0;i < tag_list.lp;i++){
+        list_element_get(tag_list, i, (void **)&tag_list_element);
+        sami_tag_list_element_check(tag_list_element, *tag_list_accrue, &tag_name_match_flag, &tag_list_match_index);
 
         switch(tag_name_match_flag){
             case 0:
-                tag_stack_accrue_element = tag_stack_element;
+                //tag_list_accrue_element = tag_list_element;
                 break;
             case 1:
-                for(j = 0;j < tag_stack_accrue.element[i].property_count;j ++){
-                    sami_tag_stack_element_combine_check_property();
+                /*
+                for(j = 0;j < tag_list_accrue.element[i].property_count;j ++){
+                    sami_tag_list_element_combine_check_property();
                 }
-                tag_stack_accrue_element = ;      
+                tag_list_accrue_element = ;        */
                 break;
         }
 
-        stack_push(tag_stack_accrue, tag_stack_accrue_element, sizeof(Tag));
+        //stack_push(tag_list_accrue, tag_list_accrue_element, sizeof(Tag));
     }
 
     return 0;
@@ -870,7 +903,7 @@ int sami_tag_ass_convert_tag(Tag *tag)
     return 0;
 }/*}}}*/
 
-int sami_tag_ass_convert(const Stack tag_stack_top, char **ass_tag, char *text)
+int sami_tag_ass_convert(const List tag_list_top, char **ass_tag, char *text)
 {/*{{{*/
     //int i;
 
@@ -892,20 +925,20 @@ int sami_tag_ass_convert(const Stack tag_stack_top, char **ass_tag, char *text)
 // return 0         : empty text
 // return 1         : exist ass text
 // return -1 / -2   : only text
-int sami_tag_ass(Stack tag_stack, const unsigned int tag_stack_max, char *plain_text, char *ass_buffer)
+int sami_tag_ass(List tag_list, char *plain_text, char *ass_buffer)
 {/*{{{*/
-    Stack tag_stack_accrue;
+    List tag_list_accrue;
 
     if(strcmp(plain_text, "") == 0){
         return 0;
     }
 
-    if(sami_tag_stack_accrue(tag_stack, tag_stack_max, &tag_stack_accrue) < 0){
+    if(sami_tag_list_accrue(tag_list, &tag_list_accrue) < 0){
         return -3;
     }
 
     /*
-    if(sami_tag_ass_convert(tag_stack_accrue, stack_ass_buffer, text) < 0){
+    if(sami_tag_ass_convert(tag_list_accrue, stack_ass_buffer, text) < 0){
         return -3;
     }
 
@@ -914,25 +947,25 @@ int sami_tag_ass(Stack tag_stack, const unsigned int tag_stack_max, char *plain_
     return 1;
 } /*}}}*/
 
-int sami_tag_parse_start(Stack tag_stack, const unsigned int tag_stack_max, char *tag_name, char *tag_property_start_po, const int tag_property_flag)
+int sami_tag_parse_start(List tag_list, char *tag_name, char *tag_property_start_po, const int tag_property_flag)
 {/*{{{*/
-    Tag  tag_stack_element_now;
+    Tag  tag_list_element_now;
 
     // initinal
-    tag_stack_element_now.name              = strdup(tag_name);
-    tag_stack_element_now.property_count    = 0;
+    tag_list_element_now.name              = strdup(tag_name);
+    tag_list_element_now.property_count    = 0;
 
     if(tag_property_flag == 1){
-        if(sami_tag_property_set(tag_property_start_po, &tag_stack_element_now) < 0){
+        if(sami_tag_property_set(tag_property_start_po, &tag_list_element_now) < 0){
             fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Set Tag Property Failed");
-            sami_tag_stack_element_free(&tag_stack_element_now);
+            sami_tag_list_element_free(&tag_list_element_now);
             return -1;
         }
     }
 
-    if(stack_push(tag_stack, &tag_stack_element_now, sizeof(Tag)) < 0){
+    if(stack_push(tag_list, &tag_list_element_now, sizeof(Tag)) < 0){
         fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Stack Push Failed");
-        sami_tag_stack_element_free(&tag_stack_element_now);
+        sami_tag_list_element_free(&tag_list_element_now);
         return -2;
     }
 
@@ -942,37 +975,37 @@ int sami_tag_parse_start(Stack tag_stack, const unsigned int tag_stack_max, char
 
 // return 0 : no end tag
 // return 1 : end tag
-int sami_tag_name_match(const char *tag_name, const char *tag_stack_pop_name)
+int sami_tag_name_match(const char *tag_name, const char *tag_list_pop_name)
 {/*{{{*/
     // dismatch tag_push_name
-    if((strcasecmp(tag_name, tag_stack_pop_name)) != 0 ){
+    if((strcasecmp(tag_name, tag_list_pop_name)) != 0 ){
         return -1;
     }
 
     return 1;
 }/*}}}*/
 
-int sami_tag_parse_end(Stack tag_stack, const unsigned int tag_stack_max, const char *tag_name)
+int sami_tag_parse_end(List tag_list, const char *tag_name)
 {/*{{{*/
-    Tag  *tag_stack_top;
+    Tag  *tag_list_top;
 
-    if(stack_top_get(tag_stack, (void *)&tag_stack_top) < 0){
+    if(stack_top_get(tag_list, (void *)&tag_list_top) < 0){
         fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__,  __FILE__, __LINE__, "ERROR : Under flow or Over flow in stack. (end tag)");
         return -1;
     }
 
     // 바로 이전태그의 시작과 지금태그의 끝이 같아야 함.
-    if(sami_tag_name_match(tag_name, tag_stack_top->name) < 0){
-        fprintf(stderr, "[%s][%s(%d)] '%s' '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Not match open/close tag name :", tag_name, tag_stack_top->name);
+    if(sami_tag_name_match(tag_name, tag_list_top->name) < 0){
+        fprintf(stderr, "[%s][%s(%d)] '%s' '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Not match open/close tag name :", tag_name, tag_list_top->name);
         return -2;
     }
 
-    stack_pop(tag_stack, sami_tag_stack_element_free);
+    stack_pop(tag_list, sami_tag_list_element_free);
 
     return 0;
 }/*}}}*/
 
-int sami_tag_parse(Stack tag_stack, const unsigned int tag_stack_max, char *source_string, char **ass_text)
+int sami_tag_parse(List tag_list, char *source_string, char **ass_text)
 {/*{{{*/
     // ass_buffer는 초기화 되어야 함.
     char *tag_po,
@@ -1003,7 +1036,7 @@ int sami_tag_parse(Stack tag_stack, const unsigned int tag_stack_max, char *sour
                     goto END_OF_TAG;
                 }
 
-                switch(sami_tag_ass(tag_stack, tag_stack_max, text, ass_buffer)){
+                switch(sami_tag_ass(tag_list, text, ass_buffer)){
                     case 0: // not exist text
                         break;
                     case 1: // ass text
@@ -1020,12 +1053,12 @@ int sami_tag_parse(Stack tag_stack, const unsigned int tag_stack_max, char *sour
 
                 switch(tag_type){
                     case 0: // start tag
-                        sami_tag_parse_start(tag_stack, tag_stack_max, tag_name, tag_property_start_po, tag_property_flag);
-                        sami_tag_stack_print(tag_stack, "Tag Start Push OK, Stack Result :");
+                        sami_tag_parse_start(tag_list, tag_name, tag_property_start_po, tag_property_flag);
+                        sami_tag_list_print(tag_list, "Tag Start Push OK, Stack Result :");
                         break;
                     case 1: // end tag
-                        sami_tag_parse_end(tag_stack, tag_stack_max, tag_name);
-                        sami_tag_stack_print(tag_stack, "Tag End   Pop  OK, Stack Result :");
+                        sami_tag_parse_end(tag_list, tag_name);
+                        sami_tag_list_print(tag_list, "Tag End   Pop  OK, Stack Result :");
                         break;
                 } END_OF_TAG:;
 
@@ -1041,7 +1074,7 @@ int sami_tag_parse(Stack tag_stack, const unsigned int tag_stack_max, char *sour
     } END_OF_LINE:;
 
     // check last string
-    switch(sami_tag_ass(tag_stack, tag_stack_max, text, ass_buffer)){
+    switch(sami_tag_ass(tag_list, text, ass_buffer)){
         case 0:
             fprintf(stderr, "[%s] DEBUG LINE '%s' - (%s, Line:%d)\n", __TIME__, "A", __FILE__, __LINE__);
             break;
@@ -1108,23 +1141,23 @@ int main(int argc, char *argv[])
     int sync_index,
         line_index,
         sync_time_line_max = -1;
-    Stack tag_stack;
+    List tag_list;
     char *ass_text;
 
     Subtitle_Devide(argv[1], &sync_time_line_max);
 
-    stack_init(&tag_stack, sizeof(Tag), TAG_STACK_MAX);
+    list_init(&tag_list, sizeof(Tag), TAG_STACK_MAX);
 
     for(sync_index = 0;sync_index < sync_time_line_max;sync_index ++){
         for(line_index = 0; subtitle_line[sync_index][line_index] != NULL;line_index ++){
             fprintf(stderr, "[%s][%s(%d)] (Sync : %d / Line: %d)   : '%s'\n", __TIME__, __FILE__, __LINE__, sync_index, line_index, subtitle_line[sync_index][line_index]);
-            sami_tag_parse(tag_stack, TAG_STACK_MAX, subtitle_line[sync_index][line_index], &ass_text);
+            sami_tag_parse(tag_list, subtitle_line[sync_index][line_index], &ass_text);
             fprintf(stderr, "[%s][%s(%d)] %s '%s'\n\n", __TIME__, __FILE__, __LINE__, "Test - Final Result     :", ass_text);
             free(ass_text);
             free(subtitle_line[sync_index][line_index]);
         }
 
-        stack_free(tag_stack, sami_tag_stack_element_free);
+        list_free(tag_list, sami_tag_list_element_free);
         fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "-Stack Clean! (Init All Element, EOL)");
         fprintf(stderr, "[%s][%s(%d)] '%s'\n\n\n", __TIME__, __FILE__, __LINE__, "-------------------------------------");
     }
