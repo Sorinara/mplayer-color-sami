@@ -781,10 +781,11 @@ int sami_tag_ass_combine(const char *tag1, const char *tag2, char **save_buffer)
 int sami_tag_stack_accrue(Stack tag_stack, const unsigned int tag_stack_max, Stack *tag_stack_accrue)
 {/*{{{*/
     int i,
+        j,
         tag_name_match_flag,
         tag_stack_match_index,
-        tag_stack_accrue_index = 0;
-    Tag *tag_stack_element;
+    Tag *tag_stack_element,
+        *tag_stack_accrue_element;
 
     for(i = 0;i < tag_stack.sp;i++){
         stack_element_get(tag_stack, i, (void **)&tag_stack_element);
@@ -792,17 +793,17 @@ int sami_tag_stack_accrue(Stack tag_stack, const unsigned int tag_stack_max, Sta
 
         switch(tag_name_match_flag){
             case 0:
-                tag_stack_accrue->element[tag_stack_accrue_index] = tag_stack.element[i];
-                tag_stack_accrue_index ++;
+                tag_stack_accrue_element = tag_stack_element;
                 break;
             case 1:
-                /*
                 for(j = 0;j < tag_stack_accrue.element[i].property_count;j ++){
                     sami_tag_stack_element_combine_check_property();
-                }  */
-                
+                }
+                tag_stack_accrue_element = ;      
                 break;
         }
+
+        stack_push(tag_stack_accrue, tag_stack_accrue_element, sizeof(Tag));
     }
 
     return 0;
