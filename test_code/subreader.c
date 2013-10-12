@@ -93,13 +93,13 @@ int list_init(List *list, const unsigned int element_size, const unsigned int el
 
 // if user_uniq_check() is return 0 : ignore
 //                         return 1 : insert in list_dest
-void list_uniq(List list_source, int (*user_uniq_check)(List, int), List *list_dest)
+void list_uniq(List list_source, int (*user_uniq_check)(List, void *), List *list_dest)
 {
     int i,
         list_dest_lp;
 
     for(i = 0;i < list_source.lp;i ++){
-        if(user_uniq_check(list, i) == 1){
+        if(user_uniq_check(list_source, list_source.element[i]) == 1){
             list_dest->element[list_dest_lp] = list_source.element[i];
             list_dest_lp ++;
         }
