@@ -43,7 +43,7 @@ typedef struct _Tag{
     Tag_Property property[TAG_PROPERTY_MAX];
 } Tag;
 
-int list_element_create(List *list, const unsigned int element_max)
+int element_create(List *list, const unsigned int element_max)
 {/*{{{*/
     if((list->element = (void **)calloc(element_max, sizeof(void*))) == NULL){
         return -1;
@@ -52,18 +52,18 @@ int list_element_create(List *list, const unsigned int element_max)
     return 0;
 }/*}}}*/
 
-void list_element_get(const List list, const unsigned int index, void **element)
+void element_get(const List list, const unsigned int index, void **element)
 {/*{{{*/
     *element = list.element[index];
 }/*}}}*/
 
-void list_element_free(List list, const unsigned int index)
+void element_free(List list, const unsigned int index)
 {/*{{{*/
     free(list.element[index]);
     list.element[index] = NULL;
 }/*}}}*/
 
-void list_element_print(const List list, const unsigned int index)
+void element_print(const List list, const unsigned int index)
 {/*{{{*/
     // Warnning: do not check over/underflow
     fprintf(stderr, "List Print { element[%d] = '%p' }\n", index, list.element[index]);
@@ -80,7 +80,7 @@ int list_init(List *list, const unsigned int element_size, const unsigned int el
         return -2;
     }
 
-    if(list_element_create(list, element_max) < 0){
+    if(element_create(list, element_max) < 0){
         return -3;
     }
 
@@ -91,28 +91,92 @@ int list_init(List *list, const unsigned int element_size, const unsigned int el
     return 0;
 }/*}}}*/
 
-// if user_uniq_check() is return 0 : ignore
-//                         return 1 : insert in list_dest
-void list_uniq(List list_source, int (*user_uniq_check)(List, void *), List *list_dest)
-{
+int list_check(List list, void *element, const unsigned int element_size)
+{/*{{{*/
+    int i;
+    
+    if(list.element_size != element_size){
+        return -1;
+    }
+
+    for(i = 0;i < list.lp;i++){
+       if(memcmp(list.element[i], element, element_size) == 0){
+          return 1; 
+       }
+    }
+    
+    return 0;
+}/*}}}*/
+
+// 만약 List안에 같은 element가
+// return 0     : 0개
+// return 1     : 1개
+// return 2     : 2개 이상
+int list_uniq(List list_source, List *list_dest, int (*user_uniq_check)(List, void *))
+{/*{{{*/
     int i,
-        list_dest_lp;
+        list_dest_lp = 0;
+
+    if(list_source.lp == 0){
+        return -1;
+    }
+
+    if(list_init(list_dest, list_source.element_size, list_source.element_max) < 0){
+        return -2;
+    }
 
     for(i = 0;i < list_source.lp;i ++){
+        // list_source에 list_source.element[i]와 일치하는것이 단 1개이고
         if(user_uniq_check(list_source, list_source.element[i]) == 1){
-            list_dest->element[list_dest_lp] = list_source.element[i];
-            list_dest_lp ++;
+            // (저장할 리스트)list_dest에 존재하지 않는경우.
+            if(list_check(list_dest, list_source.element[i], list_source.element_size) == 0){
+                list_dest->element[list_dest_lp] = list_source.element[i];
+                list_dest_lp ++;
+            }
         }
     }
 
     list_dest->lp = list_dest_lp;
-}
 
-// if user_duplication_check() is return 0 : ignore
-//                                return 1 : pile in table_dest
-void list_duplication_pile(List table_source, int (*user_duplication_check)(List, List), Table *table_dest)
+    return 0;
+}/*}}}*/
+
+// user_duplication_check() 만약 List안에 같은 element가
+// return -1    : 0개
+// return n     : n개 (List내에 일치하는 element의 index)
+void list_uniq_pile(List table_source, int (*user_uniq_check)(List, void *), Table *table_dest)
 {
+    int i;
 
+    if(list_source.lp == 0){
+        return -1;
+    }
+
+    if(table_init(table_dest, list_source.element_max) < 0){
+        return -2;
+    }
+
+    for(i = 0;i < list_source.lp;i ++){
+        //element_get(tag_list, i, (void **)&tag_list_element);
+        // list_source에 list_source.element[i]와 일치하는것이 단 1개이고
+        switch(user_uniq_check(list_source, list_source.element[i])){
+            case 1:
+                // (저장할 리스트)list_dest에 존재하지 않는경우.
+                if(list_check(list_dest, list_source.element[i], list_source.element_size) == -1){
+                    list_dest->element[list_dest_lp] = list_source.element[i];
+                    list_dest_lp ++;
+                }
+                break;
+            case 2:
+                if(list_check(list_dest, list_source.element[i], list_source.element_size) == -1){
+                    list_dest->element[list_dest_lp] = list_source.element[i];
+                    list_dest_lp ++;
+                }
+                break;
+        }
+    }
+
+    list_dest->lp = list_dest_lp;
 }
 
 void list_free(List list, void (*user_struct_free)(void*))
@@ -120,9 +184,9 @@ void list_free(List list, void (*user_struct_free)(void*))
     int i;
 
     for(i= 0;i < list.lp;i ++){
-        list_element_print(list, i);
+        element_print(list, i);
         user_struct_free(list.element[i]);
-        list_element_free(list, i);
+        element_free(list, i);
     }
 
     free(list.element);
@@ -157,7 +221,7 @@ int stack_top_get(const List list, void **element)
     }
 
     if(element != NULL){
-        list_element_get(list, sp, element);
+        element_get(list, sp, element);
     }
 
     return sp;
@@ -372,7 +436,7 @@ void sami_tag_list_element_check(Tag *tag_list_element, List tag_list_accrue, in
     *tag_list_match_index = -1;
 
     for(tag_list_index = 0;tag_list_index < tag_list_accrue.lp;tag_list_index ++){
-        list_element_get(tag_list_accrue, tag_list_index, (void *)&tag_list_accrue_element);
+        element_get(tag_list_accrue, tag_list_index, (void *)&tag_list_accrue_element);
 
         if(strcasecmp(tag_list_accrue_element->name, tag_list_element->name) == 0){
             *tag_name_match_flag = 1;
@@ -434,7 +498,7 @@ int sami_tag_list_print(List list, const char *message)
     }
 
     for(i = 0;i < list.lp;i ++){
-        list_element_get(list, i, (void *)&list_element);
+        element_get(list, i, (void *)&list_element);
 
         fprintf(stderr, "[%s][%s(%d)] %s (%d) : %s (%p)\n", __TIME__, __FILE__, __LINE__, "List Tag Name     ", i, list_element->name, list_element->name);
 
@@ -810,38 +874,6 @@ int sami_tag_ass_combine(const char *tag1, const char *tag2, char **save_buffer)
     return 0;
 }/*}}}*/
 
-int sami_tag_list_accrue(List tag_list, List *tag_list_accrue)
-{/*{{{*/
-    int i,
-        //j,
-        tag_name_match_flag,
-        tag_list_match_index;
-    Tag *tag_list_element;
-        //*tag_list_accrue_element;
-
-    for(i = 0;i < tag_list.lp;i++){
-        list_element_get(tag_list, i, (void **)&tag_list_element);
-        sami_tag_list_element_check(tag_list_element, *tag_list_accrue, &tag_name_match_flag, &tag_list_match_index);
-
-        switch(tag_name_match_flag){
-            case 0:
-                //tag_list_accrue_element = tag_list_element;
-                break;
-            case 1:
-                /*
-                for(j = 0;j < tag_list_accrue.element[i].property_count;j ++){
-                    sami_tag_list_element_combine_check_property();
-                }
-                tag_list_accrue_element = ;        */
-                break;
-        }
-
-        //stack_push(tag_list_accrue, tag_list_accrue_element, sizeof(Tag));
-    }
-
-    return 0;
-}/*}}}*/
-
 int sami_tag_ass_convert_tag(Tag *tag)
 {/*{{{*/
     int i;
@@ -928,12 +960,13 @@ int sami_tag_ass_convert(const List tag_list_top, char **ass_tag, char *text)
 int sami_tag_ass(List tag_list, char *plain_text, char *ass_buffer)
 {/*{{{*/
     List tag_list_accrue;
+    Table tag_table_dup;
 
     if(strcmp(plain_text, "") == 0){
         return 0;
     }
 
-    if(sami_tag_list_accrue(tag_list, &tag_list_accrue) < 0){
+    if(list_uniq_pile(tag_list, sami_tag_list_element_check, &tag_table_dup) < 0){
         return -3;
     }
 
@@ -1146,7 +1179,9 @@ int main(int argc, char *argv[])
 
     Subtitle_Devide(argv[1], &sync_time_line_max);
 
-    list_init(&tag_list, sizeof(Tag), TAG_STACK_MAX);
+    if(list_init(&tag_list, sizeof(Tag), TAG_STACK_MAX) < 0){
+        return -1;
+    }
 
     for(sync_index = 0;sync_index < sync_time_line_max;sync_index ++){
         for(line_index = 0; subtitle_line[sync_index][line_index] != NULL;line_index ++){
