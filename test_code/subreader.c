@@ -19,14 +19,14 @@ typedef struct _List{
 
    unsigned int element_size,
                 element_max,
-                lp;
+                ep;
 } List;
 
 typedef struct _Table{
     List *list;
 
-    unsigned int table_max,
-                 tp;
+    unsigned int list_max,
+                 lp;
 } Table;
 
 typedef struct _Tag_Property{
@@ -84,7 +84,7 @@ int list_init(List *list, const unsigned int element_size, const unsigned int el
         return -3;
     }
 
-    list->lp           = 0;
+    list->ep           = 0;
     list->element_size = element_size;
     list->element_max  = element_max;
 
@@ -93,31 +93,33 @@ int list_init(List *list, const unsigned int element_size, const unsigned int el
 
 int list_check(List list, void *element, const unsigned int element_size)
 {/*{{{*/
-    int i;
+    int list_index,
     
     if(list.element_size != element_size){
         return -1;
     }
 
-    for(i = 0;i < list.lp;i++){
-       if(memcmp(list.element[i], element, element_size) == 0){
-          return 1; 
+    for(list_index = 0;list_index < list.ep;list_index ++){
+       if(memcmp(list.element[list_index], element, element_size) == 0){
+          return list_index; 
        }
     }
     
-    return 0;
+    return -2;
 }/*}}}*/
 
-// 만약 List안에 같은 element가
-// return 0     : 0개
-// return 1     : 1개
-// return 2     : 2개 이상
-int list_uniq(List list_source, List *list_dest, int (*user_uniq_check)(List, void *))
+// uniq_element_check(list, element, index), 만약 List안에 같은 element가
+// list         : list에서 element 와 일치하는것을 찾음
+// element      : 검색할 element
+// index 0/1    : 0 : 존재하지 않음 / 1 : 1개이상 존재함
+// => list에서 한개를 발견하면 바로 루프를 중단한다.
+int list_uniq(List list_source, List *list_dest, int (*uniq_element_check)(List *, void *, unsigned int *))
 {/*{{{*/
     int i,
-        list_dest_lp = 0;
+        list_dest_ep = 0;
+    unsigned int element_match_index= 0;
 
-    if(list_source.lp == 0){
+    if(list_source.ep == 0){
         return -1;
     }
 
@@ -125,30 +127,53 @@ int list_uniq(List list_source, List *list_dest, int (*user_uniq_check)(List, vo
         return -2;
     }
 
-    for(i = 0;i < list_source.lp;i ++){
-        // list_source에 list_source.element[i]와 일치하는것이 단 1개이고
-        if(user_uniq_check(list_source, list_source.element[i]) == 1){
-            // (저장할 리스트)list_dest에 존재하지 않는경우.
-            if(list_check(list_dest, list_source.element[i], list_source.element_size) == 0){
-                list_dest->element[list_dest_lp] = list_source.element[i];
-                list_dest_lp ++;
-            }
+    for(i = 0;i < list_source.ep;i ++){
+        uniq_element_check(list_dest, list_source.element[i], &element_match_index);
+
+        // if element is not exit in list_dest
+        if(element_match_index == 0){
+            list_dest->element[list_dest_ep] = list_source.element[i];
+            list_dest_ep ++;
         }
     }
 
-    list_dest->lp = list_dest_lp;
+    list_dest->ep = list_dest_ep;
 
     return 0;
 }/*}}}*/
 
-// user_duplication_check() 만약 List안에 같은 element가
-// return -1    : 0개
-// return n     : n개 (List내에 일치하는 element의 index)
-void list_uniq_pile(List table_source, int (*user_uniq_check)(List, void *), Table *table_dest)
+int list_uniq_pile_table(Table *table, int (*uniq_element_check)(List *, void *, unsigned int *), void *element, unsigned int *list_index)
 {
-    int i;
+    int i,
+        element_size;
 
-    if(list_source.lp == 0){
+    // list element size is equal in table
+    element_size = table->list[i].element_size;
+    *list_index = 0;
+
+    for(i = 0;i < table->tp;i ++){
+        if(memcmp(table->list[i].element[0], element, element_size) == 0){
+            *list_index = i;
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+// uniq_element_check() :  만약 검사할 엘리먼트가 table안의 list의 첫번쩨 element와 일치한다면
+// return little then 0 : 일치하는것이 없음
+// return n    : 일치하는  index
+// => 어찌되었건 list를 끝까지 검사(루프)한다
+int list_uniq_pile(List list_source, int (*uniq_element_check)(Table *, void *, unsigned int *), Table *table_dest)
+{
+    int i,
+        list_dest_lp    = 0,
+        table_dest_lp   = 0;
+    unsigned int list_match_index   = 0,
+                 list_element_index = 0;
+
+    if(list_source.ep == 0){
         return -1;
     }
 
@@ -156,34 +181,27 @@ void list_uniq_pile(List table_source, int (*user_uniq_check)(List, void *), Tab
         return -2;
     }
 
-    for(i = 0;i < list_source.lp;i ++){
-        //element_get(tag_list, i, (void **)&tag_list_element);
-        // list_source에 list_source.element[i]와 일치하는것이 단 1개이고
-        switch(user_uniq_check(list_source, list_source.element[i])){
-            case 1:
-                // (저장할 리스트)list_dest에 존재하지 않는경우.
-                if(list_check(list_dest, list_source.element[i], list_source.element_size) == -1){
-                    list_dest->element[list_dest_lp] = list_source.element[i];
-                    list_dest_lp ++;
-                }
-                break;
-            case 2:
-                if(list_check(list_dest, list_source.element[i], list_source.element_size) == -1){
-                    list_dest->element[list_dest_lp] = list_source.element[i];
-                    list_dest_lp ++;
-                }
-                break;
+    for(i = 0;i < list_source.ep;i ++){
+        if(list_uniq_pile_table(table_dest, uniq_element_check, list_source.element[i], &list_match_index) == 0){
+            list_dest_lp = table_dest.lp;
+        }else{
+            list_dest_lp = list_match_index;
         }
+
+        list_element_index                                          = table_dest.list[list_dest_lp].ep;
+        table_dest->list[list_dest_lp].element[list_element_index]  = list_source.element[i];
     }
 
-    list_dest->lp = list_dest_lp;
+    table_dest->lp = table_dest_lp;
+
+    return 0;
 }
 
 void list_free(List list, void (*user_struct_free)(void*))
 {/*{{{*/
     int i;
 
-    for(i= 0;i < list.lp;i ++){
+    for(i= 0;i < list.ep;i ++){
         element_print(list, i);
         user_struct_free(list.element[i]);
         element_free(list, i);
@@ -195,16 +213,16 @@ void list_free(List list, void (*user_struct_free)(void*))
 int stack_top_index_get(const List list)
 {/*{{{*/
     // empty
-    if(list.lp == 0){
+    if(list.ep == 0){
         return -1;
     }
 
     // full
-    if(list.lp == list.element_max){
+    if(list.ep == list.element_max){
         return -2;
     }
 
-    return list.lp;
+    return list.ep;
 }/*}}}*/
 
 // get pointer in list, not data structure !
@@ -244,7 +262,7 @@ int stack_push(List list, const void *element, const unsigned int element_size)
     //fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s' (%p)\n", __TIME__,  __FILE__, __LINE__, "Element Allocated", list[sp + 1]);
     memcpy(list.element[sp + 1], element, element_size);
 
-    list.lp ++;
+    list.ep ++;
 
     return 0;
 }/*}}}*/
@@ -258,13 +276,13 @@ int stack_pop(List list, void (*user_struct_free)(void*))
         return -1;
     }
 
-    user_struct_free(list.element[list.lp]);
+    user_struct_free(list.element[list.ep]);
     //fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s' (%d) (%p)\n", __TIME__,  __FILE__, __LINE__, "List Element Free", index, list[index]);
-    free(list.element[list.lp]);
+    free(list.element[list.ep]);
 
     //fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s'\n", __TIME__,  __FILE__, __LINE__, "List Element Free - Done");
-    list.element[list.lp] = NULL;
-    list.lp --;
+    list.element[list.ep] = NULL;
+    list.ep --;
 
     return 0;
 }/*}}}*/
@@ -435,7 +453,7 @@ void sami_tag_list_element_check(Tag *tag_list_element, List tag_list_accrue, in
     *tag_name_match_flag   = 0;
     *tag_list_match_index = -1;
 
-    for(tag_list_index = 0;tag_list_index < tag_list_accrue.lp;tag_list_index ++){
+    for(tag_list_index = 0;tag_list_index < tag_list_accrue.ep;tag_list_index ++){
         element_get(tag_list_accrue, tag_list_index, (void *)&tag_list_accrue_element);
 
         if(strcasecmp(tag_list_accrue_element->name, tag_list_element->name) == 0){
@@ -487,17 +505,17 @@ int sami_tag_list_print(List list, const char *message)
 
     fprintf(stderr, "[%s][%s(%d)] %s\n", __TIME__, __FILE__, __LINE__, message);
 
-    if(list.lp == 0){
+    if(list.ep == 0){
         fprintf(stderr, "[%s][%s(%d)] %s\n", __TIME__, __FILE__, __LINE__, "List Empty");
         return -1;
     }
 
-    if(list.lp == list.element_max){
+    if(list.ep == list.element_max){
         fprintf(stderr, "[%s][%s(%d)] %s\n", __TIME__, __FILE__, __LINE__, "List Full");
         return -2;
     }
 
-    for(i = 0;i < list.lp;i ++){
+    for(i = 0;i < list.ep;i ++){
         element_get(list, i, (void *)&list_element);
 
         fprintf(stderr, "[%s][%s(%d)] %s (%d) : %s (%p)\n", __TIME__, __FILE__, __LINE__, "List Tag Name     ", i, list_element->name, list_element->name);
