@@ -108,16 +108,32 @@ int list_check(List list, void *element, const unsigned int element_size)
     return -2;
 }/*}}}*/
 
+void list_free(List list, void (*user_struct_free)(void*))
+{/*{{{*/
+    int i;
+
+    for(i= 0;i < list.ep;i ++){
+        element_print(list, i);
+        if(user_struct_free != NULL){
+            user_struct_free(list.element[i]);
+        }
+        element_free(list, i);
+    }
+
+    free(list.element);
+}/*}}}*/
+
 // uniq_element_check(list, element, index), 만약 List안에 같은 element가
 // list         : list에서 element 와 일치하는것을 찾음
 // element      : 검색할 element
 // index 0/1    : 0 : 존재하지 않음 / 1 : 1개이상 존재함
 // => list에서 한개를 발견하면 바로 루프를 중단한다.
-int list_uniq(List list_source, List *list_dest, int (*uniq_element_check)(List *, void *, unsigned int *))
+int list_uniq(List list_source, List *list_dest, void (*uniq_element_check)(List *, void *, unsigned int *, int *))
 {/*{{{*/
     int i,
-        list_dest_ep = 0;
-    unsigned int element_match_index = 0;
+        list_dest_ep        = 0,
+        element_match_index = 0;
+    unsigned int element_match_flag = 0;
 
     if(list_source.ep == 0){
         return -1;
@@ -128,10 +144,10 @@ int list_uniq(List list_source, List *list_dest, int (*uniq_element_check)(List 
     }
 
     for(i = 0;i < list_source.ep;i ++){
-        uniq_element_check(list_dest, list_source.element[i], &element_match_index);
+        uniq_element_check(list_dest, list_source.element[i], &element_match_flag, &element_match_index);
 
         // if element is not exit in list_dest
-        if(element_match_index == 0){
+        if(element_match_flag == 0){
             list_dest->element[list_dest_ep] = list_source.element[i];
             list_dest_ep ++;
         }
@@ -142,42 +158,96 @@ int list_uniq(List list_source, List *list_dest, int (*uniq_element_check)(List 
     return 0;
 }/*}}}*/
 
-int list_uniq_pile_table(Table *table, int (*uniq_element_check)(List *, void *, int *), void *element, unsigned int *list_index)
+void table_free(Table *table, void (*user_struct_free)(void*))
+{/*{{{*/
+    int i;
+
+    for(i = 0;i < table->lp;i ++){
+        list_free(table->list[i], user_struct_free);
+    }
+
+    free(table->list);
+}/*}}}*/
+
+// TODO: 나중을 대비해서 row/col 추가/삭제/검색기능도 가능하도록 설정하기.
+int table_init(Table *table, unsigned int list_max, unsigned int element_size, unsigned int element_max)
+{/*{{{*/
+    int i;
+
+    if((table->list = calloc(list_max, sizeof(List))) < 0){
+        return -1;
+    }
+
+    table->lp       = 0;
+    table->list_max = 0;
+
+    for(i = 0;i < list_max;i ++){
+        if(list_init(&(table->list[i]), element_size, element_max) < 0){
+            table_free(table, NULL);
+            return -2;
+        }
+
+        // for table_free();
+        table->lp ++;
+    }
+
+    table->list_max = list_max;
+
+    return 0;
+}/*}}}*/
+
+int table_col()
 {
-    int i,
-        name_match_flag,
-        name_match_index,
-        element_size;
+
+}
+
+int table_row()
+{
+
+}
+
+int table_search_col(Table *table, unsigned int col, void **element)
+{
+    if(row >= table->lp){
+        return -1;
+    }
+}
+
+int table_search_row(Table *table, unsigned int row, void **element);
+{
+
+}
+
+int table_list_uniq_search(Table *table, void *element, unsigned int *list_index)
+{
+    int i;
+    void *element_compare;
 
     // list element size is equal in table
-    element_size = table->list[i].element_size;
     *list_index = 0;
 
     for(i = 0;i < table->lp;i ++){
-        uniq_element_check(table->list[i].element[0], element, &name_match_flag, &name_match_index);
-        if(name_match_flag == 1){
-            *list_index = name_match_index;
+        if(memcmp(table->list[i].element[0], element, table->list[i].element_size) == 0){
+            *list_index = (unsigned int)i;
             return 1;
+        }else{
+
         }
     }
 
     return 0;
 }
 
-int table_init(Table *table, unsigned int table_max)
-{
-
-}
-
 // uniq_element_check() :  만약 검사할 엘리먼트가 table안의 list의 첫번쩨 element와 일치한다면
 // return little then 0 : 일치하는것이 없음
 // return n    : 일치하는  index
 // => 어찌되었건 list를 끝까지 검사(루프)한다
-int list_uniq_pile(List list_source, int (*uniq_element_check)(List, void *, unsigned int *, int *), Table *table_dest)
+int table_list_uniq_pile(List list_source, Table *table_dest)
 {
     int i,
-        list_dest_lp    = 0,
-        table_dest_lp   = 0;
+        table_match_flag    = 0,
+        list_dest_lp        = 0,
+        table_dest_lp       = 0;
     unsigned int list_match_index   = 0,
                  list_element_index = 0;
 
@@ -185,13 +255,16 @@ int list_uniq_pile(List list_source, int (*uniq_element_check)(List, void *, uns
         return -1;
     }
 
-    if(table_init(table_dest, list_source.element_max) < 0){
+    if(table_init(table_dest, list_source.element_size, list_source.element_size, list_source.element_max) < 0){
         return -2;
     }
 
     for(i = 0;i < list_source.ep;i ++){
-        if(list_uniq_pile_table(table_dest, uniq_element_check, list_source.element[i], &list_match_index) == 0){
+        table_match_flag = table_list_uniq_search(table_dest, list_source.element[i], &list_match_index);
+
+        if(table_match_flag == 0){
             list_dest_lp = table_dest->lp;
+            table_dest->lp ++;
         }else{
             list_dest_lp = list_match_index;
         }
@@ -204,19 +277,6 @@ int list_uniq_pile(List list_source, int (*uniq_element_check)(List, void *, uns
 
     return 0;
 }
-
-void list_free(List list, void (*user_struct_free)(void*))
-{/*{{{*/
-    int i;
-
-    for(i= 0;i < list.ep;i ++){
-        element_print(list, i);
-        user_struct_free(list.element[i]);
-        element_free(list, i);
-    }
-
-    free(list.element);
-}/*}}}*/
 
 int stack_top_index_get(const List list)
 {/*{{{*/
@@ -987,14 +1047,14 @@ int sami_tag_ass_convert(const List tag_list_top, char **ass_tag, char *text)
 // return -1 / -2   : only text
 int sami_tag_ass(List tag_list, char *plain_text, char *ass_buffer)
 {/*{{{*/
-    List tag_list_accrue;
+    //List tag_list_accrue;
     Table tag_table_dup;
 
     if(strcmp(plain_text, "") == 0){
         return 0;
     }
 
-    if(list_uniq_pile(tag_list, sami_tag_list_element_check, &tag_table_dup) < 0){
+    if(table_list_uniq_pile(tag_list, &tag_table_dup) < 0){
         return -3;
     }
 
