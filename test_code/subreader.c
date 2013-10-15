@@ -93,7 +93,7 @@ int list_init(List *list, const unsigned int element_size, const unsigned int el
 
 int list_check(List list, void *element, const unsigned int element_size)
 {/*{{{*/
-    int list_index,
+    int list_index;
     
     if(list.element_size != element_size){
         return -1;
@@ -117,7 +117,7 @@ int list_uniq(List list_source, List *list_dest, int (*uniq_element_check)(List 
 {/*{{{*/
     int i,
         list_dest_ep = 0;
-    unsigned int element_match_index= 0;
+    unsigned int element_match_index = 0;
 
     if(list_source.ep == 0){
         return -1;
@@ -142,18 +142,21 @@ int list_uniq(List list_source, List *list_dest, int (*uniq_element_check)(List 
     return 0;
 }/*}}}*/
 
-int list_uniq_pile_table(Table *table, int (*uniq_element_check)(List *, void *, unsigned int *), void *element, unsigned int *list_index)
+int list_uniq_pile_table(Table *table, int (*uniq_element_check)(List *, void *, int *), void *element, unsigned int *list_index)
 {
     int i,
+        name_match_flag,
+        name_match_index,
         element_size;
 
     // list element size is equal in table
     element_size = table->list[i].element_size;
     *list_index = 0;
 
-    for(i = 0;i < table->tp;i ++){
-        if(memcmp(table->list[i].element[0], element, element_size) == 0){
-            *list_index = i;
+    for(i = 0;i < table->lp;i ++){
+        uniq_element_check(table->list[i].element[0], element, &name_match_flag, &name_match_index);
+        if(name_match_flag == 1){
+            *list_index = name_match_index;
             return 1;
         }
     }
@@ -161,11 +164,16 @@ int list_uniq_pile_table(Table *table, int (*uniq_element_check)(List *, void *,
     return 0;
 }
 
+int table_init(Table *table, unsigned int table_max)
+{
+
+}
+
 // uniq_element_check() :  만약 검사할 엘리먼트가 table안의 list의 첫번쩨 element와 일치한다면
 // return little then 0 : 일치하는것이 없음
 // return n    : 일치하는  index
 // => 어찌되었건 list를 끝까지 검사(루프)한다
-int list_uniq_pile(List list_source, int (*uniq_element_check)(Table *, void *, unsigned int *), Table *table_dest)
+int list_uniq_pile(List list_source, int (*uniq_element_check)(List, void *, unsigned int *, int *), Table *table_dest)
 {
     int i,
         list_dest_lp    = 0,
@@ -183,12 +191,12 @@ int list_uniq_pile(List list_source, int (*uniq_element_check)(Table *, void *, 
 
     for(i = 0;i < list_source.ep;i ++){
         if(list_uniq_pile_table(table_dest, uniq_element_check, list_source.element[i], &list_match_index) == 0){
-            list_dest_lp = table_dest.lp;
+            list_dest_lp = table_dest->lp;
         }else{
             list_dest_lp = list_match_index;
         }
 
-        list_element_index                                          = table_dest.list[list_dest_lp].ep;
+        list_element_index                                          = table_dest->list[list_dest_lp].ep;
         table_dest->list[list_dest_lp].element[list_element_index]  = list_source.element[i];
     }
 
@@ -445,13 +453,15 @@ void sami_tag_list_element_free(void *list_element_void)
     element->property_count = 0;
 }/*}}}*/
 
-void sami_tag_list_element_check(Tag *tag_list_element, List tag_list_accrue, int *tag_name_match_flag, int *tag_list_match_index)
+void sami_tag_list_element_check(List tag_list_accrue, void *tag_list_element_void, unsigned int *tag_name_match_flag, int *tag_list_match_index)
 {/*{{{*/
     int tag_list_index;
-    Tag *tag_list_accrue_element; 
+    Tag *tag_list_element,
+        *tag_list_accrue_element;
 
-    *tag_name_match_flag   = 0;
-    *tag_list_match_index = -1;
+    tag_list_element        = (Tag *)tag_list_element_void;
+    *tag_name_match_flag    = 0;
+    *tag_list_match_index   = -1;
 
     for(tag_list_index = 0;tag_list_index < tag_list_accrue.ep;tag_list_index ++){
         element_get(tag_list_accrue, tag_list_index, (void *)&tag_list_accrue_element);
