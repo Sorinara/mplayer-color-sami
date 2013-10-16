@@ -14,19 +14,26 @@
 
 char *subtitle_line[5000][16] = {{NULL}};
 
-typedef struct _List{
-   void **element;
+typedef struct _Element{
+    void *data;
 
-   unsigned int element_size,
-                element_max,
+    unsigned int data_size;
+} Element;
+
+typedef struct _List{
+   Element *element;
+
+   unsigned int element_max,
                 ep;
 } List;
 
 typedef struct _Table{
-    List *list;
+    Element **element;
 
-    unsigned int list_max,
-                 lp;
+    unsigned int element_rp,
+                 element_row_max,
+                 element_cp,
+                 element_col_max;
 } Table;
 
 typedef struct _Tag_Property{
@@ -45,7 +52,7 @@ typedef struct _Tag{
 
 int element_create(List *list, const unsigned int element_max)
 {/*{{{*/
-    if((list->element = (void **)calloc(element_max, sizeof(void*))) == NULL){
+    if((list->element = (Element *)calloc(element_max, sizeof(Element))) == NULL){
         return -1;
     }
 
