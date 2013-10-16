@@ -17,23 +17,21 @@ char *subtitle_line[5000][16] = {{NULL}};
 typedef struct _Element{
     void *data;
 
-    unsigned int data_size;
+    unsigned int size;
 } Element;
 
 typedef struct _List{
    Element *element;
 
-   unsigned int element_max,
-                ep;
+   unsigned int ep,
+                element_max;
 } List;
 
 typedef struct _Table{
-    Element **element;
+    List *list;
 
-    unsigned int element_rp,
-                 element_row_max,
-                 element_cp,
-                 element_col_max;
+    unsigned int lp,
+                 list_max;
 } Table;
 
 typedef struct _Tag_Property{
@@ -50,7 +48,39 @@ typedef struct _Tag{
     Tag_Property property[TAG_PROPERTY_MAX];
 } Tag;
 
-int element_create(List *list, const unsigned int element_max)
+int element_data_insert(Element *element, void *data, const unsigned int element_size)
+{/*{{{*/
+    if(element == NULL){
+        return -1;
+    }
+
+    if(element_size <= 0){
+        return -2;
+    }
+
+    if((element->data = (void *)calloc(1, element_size)) == NULL){
+        return -3;
+    }
+
+    memcpy(element->data, data, element_size);
+
+    element->size = element_size;
+
+    return 0;
+}/*}}}*/
+
+void element_get(const List list, const unsigned int index, Element *element)
+{/*{{{*/
+    *element = list.element[index];
+}/*}}}*/
+
+void element_print(const List list, const unsigned int index)
+{/*{{{*/
+    // Warnning: do not check over/underflow
+    fprintf(stderr, "List Print { element[%d] = '%p' }\n", index, list.element[index].data);
+}/*}}}*/
+
+int element_array_create(List *list, const unsigned int element_max)
 {/*{{{*/
     if((list->element = (Element *)calloc(element_max, sizeof(Element))) == NULL){
         return -1;
@@ -59,72 +89,52 @@ int element_create(List *list, const unsigned int element_max)
     return 0;
 }/*}}}*/
 
-void element_get(const List list, const unsigned int index, void **element)
+void element_array_free(List list, const unsigned int index)
 {/*{{{*/
-    *element = list.element[index];
+    free(list.element);
+    list.element = NULL;
 }/*}}}*/
 
-void element_free(List list, const unsigned int index)
+int list_init(List *list, const unsigned int element_max)
 {/*{{{*/
-    free(list.element[index]);
-    list.element[index] = NULL;
-}/*}}}*/
-
-void element_print(const List list, const unsigned int index)
-{/*{{{*/
-    // Warnning: do not check over/underflow
-    fprintf(stderr, "List Print { element[%d] = '%p' }\n", index, list.element[index]);
-}/*}}}*/
-
-int list_init(List *list, const unsigned int element_size, const unsigned int element_max)
-{/*{{{*/
-
-    if(element_size == 0){
+    if(element_max == 0){
         return -1;
     }
 
-    if(element_max == 0){
+    if(element_array_create(list, element_max) < 0){
         return -2;
     }
 
-    if(element_create(list, element_max) < 0){
-        return -3;
-    }
-
     list->ep           = 0;
-    list->element_size = element_size;
     list->element_max  = element_max;
 
     return 0;
 }/*}}}*/
 
-int list_check(List list, void *element, const unsigned int element_size)
+int list_check(List list, Element element)
 {/*{{{*/
     int list_index;
     
-    if(list.element_size != element_size){
-        return -1;
-    }
-
     for(list_index = 0;list_index < list.ep;list_index ++){
-       if(memcmp(list.element[list_index], element, element_size) == 0){
+        if(list.element[list_index].size != element.size){
+            continue;
+        }
+
+       if(memcmp(list.element[list_index].data, element.data, element.size) == 0){
           return list_index; 
        }
     }
     
-    return -2;
+    return -1;
 }/*}}}*/
 
-void list_free(List list, void (*user_struct_free)(void*))
+void list_free(List list)
 {/*{{{*/
     int i;
 
-    for(i= 0;i < list.ep;i ++){
-        element_print(list, i);
-        if(user_struct_free != NULL){
-            user_struct_free(list.element[i]);
-        }
-        element_free(list, i);
+    for(i = 0;i < list.ep;i ++){
+        //element_print(list, i);
+        element_array_free(list, i);
     }
 
     free(list.element);
@@ -135,7 +145,7 @@ void list_free(List list, void (*user_struct_free)(void*))
 // element      : 검색할 element
 // index 0/1    : 0 : 존재하지 않음 / 1 : 1개이상 존재함
 // => list에서 한개를 발견하면 바로 루프를 중단한다.
-int list_uniq(List list_source, List *list_dest, void (*uniq_element_check)(List *, void *, unsigned int *, int *))
+int list_uniq(List list_source, List *list_dest, void (*uniq_element_check)(List *, Element, unsigned int *, int *))
 {/*{{{*/
     int i,
         list_dest_ep        = 0,
@@ -146,7 +156,7 @@ int list_uniq(List list_source, List *list_dest, void (*uniq_element_check)(List
         return -1;
     }
 
-    if(list_init(list_dest, list_source.element_size, list_source.element_max) < 0){
+    if(list_init(list_dest, list_source.element_max) < 0){
         return -2;
     }
 
@@ -155,7 +165,7 @@ int list_uniq(List list_source, List *list_dest, void (*uniq_element_check)(List
 
         // if element is not exit in list_dest
         if(element_match_flag == 0){
-            list_dest->element[list_dest_ep] = list_source.element[i];
+            element_data_insert(&(list_dest->element[list_dest_ep]), list_source.element[i].data, list_source.element_max);
             list_dest_ep ++;
         }
     }
@@ -165,76 +175,72 @@ int list_uniq(List list_source, List *list_dest, void (*uniq_element_check)(List
     return 0;
 }/*}}}*/
 
-void table_free(Table *table, void (*user_struct_free)(void*))
+void table_free(Table *table)
 {/*{{{*/
     int i;
 
     for(i = 0;i < table->lp;i ++){
-        list_free(table->list[i], user_struct_free);
+        list_free(table->list[i]);
     }
 
     free(table->list);
 }/*}}}*/
 
-// TODO: 나중을 대비해서 row/col 추가/삭제/검색기능도 가능하도록 설정하기.
-int table_init(Table *table, unsigned int list_max, unsigned int element_size, unsigned int element_max)
+int table_array_create(Table *table, const unsigned int list_max)
 {/*{{{*/
-    int i;
-
     if((table->list = calloc(list_max, sizeof(List))) < 0){
         return -1;
     }
 
-    table->lp       = 0;
-    table->list_max = 0;
+    return 0;
+}/*}}}*/
 
-    for(i = 0;i < list_max;i ++){
-        if(list_init(&(table->list[i]), element_size, element_max) < 0){
-            table_free(table, NULL);
-            return -2;
-        }
-
-        // for table_free();
-        table->lp ++;
+// TODO: 나중을 대비해서 row/col 추가/삭제/검색기능도 가능하도록 설정하기.
+int table_init(Table *table, unsigned int key_list_max)
+{/*{{{*/
+    if(table_array_create(table, key_list_max) < 0){
+        return -1;
     }
 
-    table->list_max = list_max;
+    table->lp       = 0;
+    table->list_max = key_list_max;
 
     return 0;
 }/*}}}*/
 
 int table_col()
 {
-
+    return 0;
 }
 
 int table_row()
 {
-
+    return 0;
 }
 
 int table_search_col(Table *table, unsigned int col, void **element)
 {
-    if(row >= table->lp){
-        return -1;
-    }
+    return 0;
 }
 
-int table_search_row(Table *table, unsigned int row, void **element);
+int table_search_row(Table *table, unsigned int row, void **element)
 {
-
+    return 0;
 }
 
-int table_list_uniq_search(Table *table, void *element, unsigned int *list_index)
+int table_list_uniq_search(Table *table, Element element, unsigned int *list_index)
 {
     int i;
-    void *element_compare;
 
     // list element size is equal in table
     *list_index = 0;
 
     for(i = 0;i < table->lp;i ++){
-        if(memcmp(table->list[i].element[0], element, table->list[i].element_size) == 0){
+        if(table->list[i].ep == 0){
+            continue;
+        }
+
+        if(memcmp(table->list[i].element[0].data, element.data, element.size) == 0){
             *list_index = (unsigned int)i;
             return 1;
         }else{
@@ -262,7 +268,7 @@ int table_list_uniq_pile(List list_source, Table *table_dest)
         return -1;
     }
 
-    if(table_init(table_dest, list_source.element_size, list_source.element_size, list_source.element_max) < 0){
+    if(table_init(table_dest, list_source.element_max) < 0){
         return -2;
     }
 
@@ -301,7 +307,7 @@ int stack_top_index_get(const List list)
 }/*}}}*/
 
 // get pointer in list, not data structure !
-int stack_top_get(const List list, void **element)
+int stack_top_get(const List list, Element *element)
 {/*{{{*/
     int sp;
 
@@ -321,7 +327,7 @@ int stack_top_get(const List list, void **element)
 }/*}}}*/
 
 // top position in list, memory allocation
-int stack_push(List list, const void *element, const unsigned int element_size)
+int stack_push(List list, const void *data, const unsigned int element_size)
 {/*{{{*/
     int sp;
 
@@ -330,12 +336,13 @@ int stack_push(List list, const void *element, const unsigned int element_size)
         return -1;
     }
 
-    if((list.element[sp + 1] = calloc(1, element_size)) == NULL){
+    if((list.element[sp + 1].data = calloc(1, element_size)) == NULL){
         return -2;
     }
 
     //fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s' (%p)\n", __TIME__,  __FILE__, __LINE__, "Element Allocated", list[sp + 1]);
-    memcpy(list.element[sp + 1], element, element_size);
+    memcpy(list.element[sp + 1].data, data, element_size);
+    list.element[sp + 1].size = element_size;
 
     list.ep ++;
 
@@ -343,7 +350,7 @@ int stack_push(List list, const void *element, const unsigned int element_size)
 }/*}}}*/
 
 // remove only, if you want get element in list, use "stack_top_get()"
-int stack_pop(List list, void (*user_struct_free)(void*))
+int stack_pop(List list)
 {/*{{{*/
 
     // check underflow (do not check empty !)
@@ -351,12 +358,12 @@ int stack_pop(List list, void (*user_struct_free)(void*))
         return -1;
     }
 
-    user_struct_free(list.element[list.ep]);
     //fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s' (%d) (%p)\n", __TIME__,  __FILE__, __LINE__, "List Element Free", index, list[index]);
-    free(list.element[list.ep]);
+    //free(list.element[list.ep]);
 
     //fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s'\n", __TIME__,  __FILE__, __LINE__, "List Element Free - Done");
-    list.element[list.ep] = NULL;
+    list.element[list.ep].data = NULL;
+    list.element[list.ep].size = 0;
     list.ep --;
 
     return 0;
@@ -1128,7 +1135,7 @@ int sami_tag_parse_end(List tag_list, const char *tag_name)
         return -2;
     }
 
-    stack_pop(tag_list, sami_tag_list_element_free);
+    stack_pop(tag_list);
 
     return 0;
 }/*}}}*/
@@ -1274,7 +1281,7 @@ int main(int argc, char *argv[])
 
     Subtitle_Devide(argv[1], &sync_time_line_max);
 
-    if(list_init(&tag_list, sizeof(Tag), TAG_STACK_MAX) < 0){
+    if(list_init(&tag_list, TAG_STACK_MAX) < 0){
         return -1;
     }
 
@@ -1287,7 +1294,7 @@ int main(int argc, char *argv[])
             free(subtitle_line[sync_index][line_index]);
         }
 
-        list_free(tag_list, sami_tag_list_element_free);
+        list_free(tag_list);
         fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "-Stack Clean! (Init All Element, EOL)");
         fprintf(stderr, "[%s][%s(%d)] '%s'\n\n\n", __TIME__, __FILE__, __LINE__, "-------------------------------------");
     }
