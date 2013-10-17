@@ -48,22 +48,24 @@ typedef struct _Tag{
     Tag_Property property[TAG_PROPERTY_MAX];
 } Tag;
 
-void element_data_free(Element element)
+int element_data_new(Element *element, const void *data, const unsigned int data_size)
 {/*{{{*/
-    free(element.data); 
-    element.size = 0;
-}/*}}}*/
-
-int element_data_new(Element *element, const void *data, const unsigned int element_size)
-{/*{{{*/
-    if((element->data = (void *)calloc(1, element_size)) == NULL){
+    if((element->data = (void *)calloc(1, data_size)) == NULL){
         return -1;
     }
 
-    memcpy(element->data, data, element_size);
-    element->size = element_size;
+    memcpy(element->data, data, data_size);
+    element->size = data_size;
 
     return 0;
+}/*}}}*/
+
+void element_data_free(Element *element)
+{/*{{{*/
+    free(element->data); 
+
+    element->data = NULL;
+    element->size = 0;
 }/*}}}*/
 
 void element_data_print(const Element element)
@@ -71,7 +73,7 @@ void element_data_print(const Element element)
     fprintf(stderr, "{ element = '%p' (%d) }\n", element.data, element.size);
 }/*}}}*/
 
-int list_element_data_new(List *list, const unsigned int element_index, const void *data, const unsigned int element_size)
+int list_element_data_new(List *list, const unsigned int element_index, const void *data, const unsigned int data_size)
 {/*{{{*/
     if(list == NULL){
         return -1;
@@ -81,7 +83,7 @@ int list_element_data_new(List *list, const unsigned int element_index, const vo
         return -2;
     }
 
-    if(element_size <= 0){
+    if(data_size <= 0){
         return -3;
     }
 
@@ -89,31 +91,35 @@ int list_element_data_new(List *list, const unsigned int element_index, const vo
         return -4;
     }
 
-    if(element_data_new(&(list->element[element_index]), data, element_size) < 0){
+    if(element_data_new(&(list->element[element_index]), data, data_size) < 0){
         return -5;
     }
 
     return 0;
 }/*}}}*/
 
-int list_element_data_get(const List list, const unsigned int element_index, void **data)
+int list_element_data_free(List *list, const unsigned int element_index)
 {/*{{{*/
-    if(element_index > list.ep){
+    if(element_index > list->ep){
         return -1;
     }
 
-    *data = list.element[element_index].data;
+    element_data_free(&(list->element[element_index]));
 
     return 0;
 }/*}}}*/
 
-int list_element_data_size_get(const List list, const unsigned int element_index, unsigned int *size)
+int list_element_data_get(const List list, const unsigned int element_index, void *data, const unsigned int data_size)
 {/*{{{*/
     if(element_index > list.ep){
         return -1;
     }
 
-    *size = list.element[element_index].size;
+    if(list.element[element_index].size != data_size){
+        return -2;
+    }
+
+    memcpy(data, list.element[element_index].data, data_size);
 
     return 0;
 }/*}}}*/
@@ -163,7 +169,7 @@ int list_element_max_index_get(const List list)
     return list.ep;
 }/*}}}*/
 
-int list_element_search(const List list, int user_list_element_check(void *, void *, const int), const Element element)
+int list_element_search(const List list, int user_list_element_match(void *, void *, const int), const Element element)
 {/*{{{*/
     int list_index;
     
@@ -172,12 +178,12 @@ int list_element_search(const List list, int user_list_element_check(void *, voi
             continue;
         }
 
-        if(user_list_element_check == NULL){
+        if(user_list_element_match == NULL){
             if(memcmp(list.element[list_index].data, element.data, element.size) == 0){
                 return list_index; 
             }
         }else{
-            if(user_list_element_check(list.element[list_index].data, element.data, element.size) == 1){
+            if(user_list_element_match(list.element[list_index].data, element.data, element.size) == 1){
                 return list_index;
             }
         }
@@ -209,7 +215,7 @@ void list_free(List list)
     //list_element_print(list);
     
     for(i = 0;i < list.ep;i ++){
-        element_data_free(list.element[i]);
+        list_element_data_free(&list, i);
     }
 
     free(list.element);
@@ -219,11 +225,8 @@ void list_free(List list)
 }/*}}}*/
 
 // uniq_element_check(list, element, index), 만약 List안에 같은 element가
-// list         : list에서 element 와 일치하는것을 찾음
-// element      : 검색할 element
-// index 0/1    : 0 : 존재하지 않음 / 1 : 1개이상 존재함
 // => list에서 한개를 발견하면 바로 루프를 중단한다.
-int list_uniq(List list_source, int user_list_element_check(void *, void *, const int), List *list_dest)
+int list_uniq(List list_source, int user_list_element_match(void *, void *, const int), List *list_dest)
 {/*{{{*/
     int i,
         element_match_index = 0;
@@ -237,7 +240,7 @@ int list_uniq(List list_source, int user_list_element_check(void *, void *, cons
     }
 
     for(i = 0;i < list_source.ep;i ++){
-        element_match_index = list_element_search(*list_dest, user_list_element_check, list_source.element[i]);
+        element_match_index = list_element_search(*list_dest, user_list_element_match, list_source.element[i]);
         // if element is not exit in list_dest
         if(element_match_index < 0){
             if(list_element_data_new(list_dest, list_dest->ep, list_source.element[i].data, list_source.element[i].size) < 0){
@@ -276,7 +279,7 @@ int table_array_create(Table *table, const unsigned int list_max)
 }/*}}}*/
 
 // TODO: 나중을 대비해서 row/col 추가/삭제/검색기능도 가능하도록 설정하기.
-int table_init(Table *table, unsigned int key_list_max)
+int table_init(Table *table, const unsigned int key_list_max)
 {/*{{{*/
     if(table_array_create(table, key_list_max) < 0){
         return -1;
@@ -288,40 +291,33 @@ int table_init(Table *table, unsigned int key_list_max)
     return 0;
 }/*}}}*/
 
-int table_col()
-{
-    return 0;
-}
+int table_data_get(const Table table, const unsigned int key_list_index, const unsigned int element_index, void *data, const unsigned int data_size)
+{/*{{{*/
+    if(key_list_index > table.lp){
+        return -1;
+    }
 
-int table_row()
-{
-    return 0;
-}
+    if(list_element_data_get(*(table.list), key_list_index, data, data_size) < 0){
+        return -2;
+    }
 
-int table_search_col(Table *table, unsigned int col, void **element)
-{
     return 0;
-}
+}/*}}}*/
 
-int table_search_row(Table *table, unsigned int row, void **element)
-{
-    return 0;
-}
-
-int table_list_uniq_search(Table *table, Element element, unsigned int *list_index)
-{
+int table_list_element_search(const Table *table, int user_list_element_match(void *, void *, const int), const unsigned int element_index, unsigned int *key_list_index, Element element)
+{/*{{{*/
     int i;
 
     // list element size is equal in table
-    *list_index = 0;
+    *key_list_index = 0;
 
     for(i = 0;i < table->lp;i ++){
         if(table->list[i].ep == 0){
             continue;
         }
 
-        if(memcmp(table->list[i].element[0].data, element.data, element.size) == 0){
-            *list_index = (unsigned int)i;
+        if(memcmp(table->list[i].element[element_index].data, element.data, element.size) == 0){
+            *key_list_index = (unsigned int)i;
             return 1;
         }else{
 
@@ -329,14 +325,12 @@ int table_list_uniq_search(Table *table, Element element, unsigned int *list_ind
     }
 
     return 0;
-}
+}/*}}}*/
 
 // uniq_element_check() :  만약 검사할 엘리먼트가 table안의 list의 첫번쩨 element와 일치한다면
-// return little then 0 : 일치하는것이 없음
-// return n    : 일치하는  index
 // => 어찌되었건 list를 끝까지 검사(루프)한다
-int table_list_uniq_pile(List list_source, Table *table_dest)
-{
+int table_list_uniq_pile(List list_source, int user_list_element_match(void *, void *, const int), Table *table_dest)
+{/*{{{*/
     int i,
         table_match_flag    = 0,
         list_dest_lp        = 0,
@@ -353,7 +347,7 @@ int table_list_uniq_pile(List list_source, Table *table_dest)
     }
 
     for(i = 0;i < list_source.ep;i ++){
-        table_match_flag = table_list_uniq_search(table_dest, list_source.element[i], &list_match_index);
+        table_match_flag = table_list_element_search(table_dest, user_list_element_match, 0, &list_match_index, list_source.element[i]);
 
         if(table_match_flag == 0){
             list_dest_lp = table_dest->lp;
@@ -369,10 +363,25 @@ int table_list_uniq_pile(List list_source, Table *table_dest)
     table_dest->lp = table_dest_lp;
 
     return 0;
+}/*}}}*/
+
+int table_search(const Table table, int user_list_element_match(void *, void *, const int), Element element)
+{
+    // list element size is equal in table
+    //*key_list_index = 0;
+    int i;
+
+    for(i = 0;i < table.lp;i ++){
+        if(list_element_search(table.list[i], user_list_element_match, element) > 0){
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 // get pointer in list, not data structure !
-int stack_top_get(const List list, Element *element)
+int stack_top_get(const List list, void *data, const unsigned int data_size)
 {/*{{{*/
     int sp;
 
@@ -384,52 +393,44 @@ int stack_top_get(const List list, Element *element)
             return -2;
     }
 
-    if(element != NULL){
-        list_element_get(list, sp, element);
+    if(data != NULL){
+        list_element_data_get(list, sp, data, data_size);
     }
 
     return sp;
 }/*}}}*/
 
 // top position in list, memory allocation
-int stack_push(List list, const void *data, const unsigned int element_size)
+int stack_push(List *list, const void *data, const unsigned int data_size)
 {/*{{{*/
     int sp;
 
     // check overflow (do not check empty !)
-    if((sp = list_element_max_index_get(list)) == -2){
+    if((sp = list_element_max_index_get(*list)) == -2){
         return -1;
     }
 
-    if((list.element[sp + 1].data = calloc(1, element_size)) == NULL){
+    if(list_element_data_new(list, sp + 1, data, data_size) < 0){
         return -2;
     }
 
-    //fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s' (%p)\n", __TIME__,  __FILE__, __LINE__, "Element Allocated", list[sp + 1]);
-    memcpy(list.element[sp + 1].data, data, element_size);
-    list.element[sp + 1].size = element_size;
-
-    list.ep ++;
+    list->ep ++;
 
     return 0;
 }/*}}}*/
 
 // remove only, if you want get element in list, use "stack_top_get()"
-int stack_pop(List list)
+int stack_pop(List *list)
 {/*{{{*/
 
     // check underflow (do not check empty !)
-    if(list_element_max_index_get(list) == -1){
+    if(list_element_max_index_get(*list) == -1){
         return -1;
     }
 
-    //fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s' (%d) (%p)\n", __TIME__,  __FILE__, __LINE__, "List Element Free", index, list[index]);
-    //free(list.element[list.ep]);
+    list_element_data_free(list, list->ep);
 
-    //fprintf(stderr, "[%s][%s(%d)] DEBUG LINE '%s'\n", __TIME__,  __FILE__, __LINE__, "List Element Free - Done");
-    list.element[list.ep].data = NULL;
-    list.element[list.ep].size = 0;
-    list.ep --;
+    list->ep --;
 
     return 0;
 }/*}}}*/
@@ -592,28 +593,19 @@ void sami_tag_list_element_free(void *list_element_void)
     element->property_count = 0;
 }/*}}}*/
 
-void sami_tag_list_element_check(List tag_list_accrue, void *tag_list_element_void, unsigned int *tag_name_match_flag, int *tag_list_match_index)
+int sami_tag_list_name_check(void *element1_void, void *element2_void, int element_size)
 {/*{{{*/
-    int tag_list_index;
-    Tag *tag_list_element,
-        *tag_list_accrue_element;
+    Tag element1,
+        element2;
 
-    tag_list_element        = (Tag *)tag_list_element_void;
-    *tag_name_match_flag    = 0;
-    *tag_list_match_index   = -1;
+    memcpy(&element1, element1_void, element_size);
+    memcpy(&element2, element2_void, element_size);
 
-    for(tag_list_index = 0;tag_list_index < tag_list_accrue.ep;tag_list_index ++){
-        list_element_get(tag_list_accrue, tag_list_index, (void *)&tag_list_accrue_element);
-
-        if(strcasecmp(tag_list_accrue_element->name, tag_list_element->name) == 0){
-            *tag_name_match_flag = 1;
-            break;
-        }
+    if(strcasecmp(element1.name, element2.name) == 0){
+        return 1;
     }
 
-    if(*tag_name_match_flag == 1){
-        *tag_list_match_index = tag_list_index;
-    }
+    return 0;
 }/*}}}*/
 
 void sami_tag_list_element_combine_check_property(const Tag *tag_source, const Tag_Property tag_dest_property, int *property_name_match_flag, int *property_value_match_flag, int *list_top_element, int *list_index_match)
@@ -1133,7 +1125,7 @@ int sami_tag_ass(List tag_list, char *plain_text, char *ass_buffer)
         return 0;
     }
 
-    if(table_list_uniq_pile(tag_list, &tag_table_dup) < 0){
+    if(table_list_uniq_pile(tag_list, sami_tag_list_name_check, &tag_table_dup) < 0){
         return -3;
     }
 
@@ -1147,7 +1139,7 @@ int sami_tag_ass(List tag_list, char *plain_text, char *ass_buffer)
     return 1;
 } /*}}}*/
 
-int sami_tag_parse_start(List tag_list, char *tag_name, char *tag_property_start_po, const int tag_property_flag)
+int sami_tag_parse_start(List *tag_list, char *tag_name, char *tag_property_start_po, const int tag_property_flag)
 {/*{{{*/
     Tag  tag_list_element_now;
 
@@ -1185,18 +1177,18 @@ int sami_tag_name_match(const char *tag_name, const char *tag_list_pop_name)
     return 1;
 }/*}}}*/
 
-int sami_tag_parse_end(List tag_list, const char *tag_name)
+int sami_tag_parse_end(List *tag_list, const char *tag_name)
 {/*{{{*/
-    Tag  *tag_list_top;
+    Tag  tag_list_top;
 
-    if(stack_top_get(tag_list, (void *)&tag_list_top) < 0){
+    if(stack_top_get(*tag_list, &tag_list_top, sizeof(Tag)) < 0){
         fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__,  __FILE__, __LINE__, "ERROR : Under flow or Over flow in stack. (end tag)");
         return -1;
     }
 
     // 바로 이전태그의 시작과 지금태그의 끝이 같아야 함.
-    if(sami_tag_name_match(tag_name, tag_list_top->name) < 0){
-        fprintf(stderr, "[%s][%s(%d)] '%s' '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Not match open/close tag name :", tag_name, tag_list_top->name);
+    if(sami_tag_name_match(tag_name, tag_list_top.name) < 0){
+        fprintf(stderr, "[%s][%s(%d)] '%s' '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Not match open/close tag name :", tag_name, tag_list_top.name);
         return -2;
     }
 
@@ -1205,7 +1197,7 @@ int sami_tag_parse_end(List tag_list, const char *tag_name)
     return 0;
 }/*}}}*/
 
-int sami_tag_parse(List tag_list, char *source_string, char **ass_text)
+int sami_tag_parse(List *tag_list, char *source_string, char **ass_text)
 {/*{{{*/
     // ass_buffer는 초기화 되어야 함.
     char *tag_po,
@@ -1236,7 +1228,7 @@ int sami_tag_parse(List tag_list, char *source_string, char **ass_text)
                     goto END_OF_TAG;
                 }
 
-                switch(sami_tag_ass(tag_list, text, ass_buffer)){
+                switch(sami_tag_ass(*tag_list, text, ass_buffer)){
                     case 0: // not exist text
                         break;
                     case 1: // ass text
@@ -1254,11 +1246,11 @@ int sami_tag_parse(List tag_list, char *source_string, char **ass_text)
                 switch(tag_type){
                     case 0: // start tag
                         sami_tag_parse_start(tag_list, tag_name, tag_property_start_po, tag_property_flag);
-                        sami_tag_list_print(tag_list, "Tag Start Push OK, Stack Result :");
+                        sami_tag_list_print(*tag_list, "Tag Start Push OK, Stack Result :");
                         break;
                     case 1: // end tag
                         sami_tag_parse_end(tag_list, tag_name);
-                        sami_tag_list_print(tag_list, "Tag End   Pop  OK, Stack Result :");
+                        sami_tag_list_print(*tag_list, "Tag End   Pop  OK, Stack Result :");
                         break;
                 } END_OF_TAG:;
 
@@ -1274,7 +1266,7 @@ int sami_tag_parse(List tag_list, char *source_string, char **ass_text)
     } END_OF_LINE:;
 
     // check last string
-    switch(sami_tag_ass(tag_list, text, ass_buffer)){
+    switch(sami_tag_ass(*tag_list, text, ass_buffer)){
         case 0:
             fprintf(stderr, "[%s] DEBUG LINE '%s' - (%s, Line:%d)\n", __TIME__, "A", __FILE__, __LINE__);
             break;
@@ -1353,7 +1345,7 @@ int main(int argc, char *argv[])
     for(sync_index = 0;sync_index < sync_time_line_max;sync_index ++){
         for(line_index = 0; subtitle_line[sync_index][line_index] != NULL;line_index ++){
             fprintf(stderr, "[%s][%s(%d)] (Sync : %d / Line: %d)   : '%s'\n", __TIME__, __FILE__, __LINE__, sync_index, line_index, subtitle_line[sync_index][line_index]);
-            sami_tag_parse(tag_list, subtitle_line[sync_index][line_index], &ass_text);
+            sami_tag_parse(&tag_list, subtitle_line[sync_index][line_index], &ass_text);
             fprintf(stderr, "[%s][%s(%d)] %s '%s'\n\n", __TIME__, __FILE__, __LINE__, "Test - Final Result     :", ass_text);
             free(ass_text);
             free(subtitle_line[sync_index][line_index]);
