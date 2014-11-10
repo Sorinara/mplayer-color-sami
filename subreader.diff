@@ -1,5 +1,5 @@
 --- subreader_ori.c	2012-05-22 04:17:55.000000000 +0900
-+++ subreader.c	2014-11-09 12:46:17.924320380 +0900
++++ subreader.c	2014-11-10 22:52:42.641777374 +0900
 @@ -24,6 +24,7 @@
  #include <stdio.h>
  #include <stdlib.h>
@@ -150,7 +150,7 @@
 +            break;
 +        }
 +
-+        fprintf(stderr, "[%s][%s(%d)] -- Free Stack (%d) (%p) --\n", __TIME__, __FILE__, __LINE__, stack_index, stack[stack_index]);
++        //fprintf(stderr, "[%s][%s(%d)] -- Free Stack (%d) (%p) --\n", __TIME__, __FILE__, __LINE__, stack_index, stack[stack_index]);
 +
 +        stack_element_free(stack[stack_index]);
 +        free(stack[stack_index]);
@@ -353,10 +353,10 @@
 +        return -1;
 +    }
 +
-+    fprintf(stderr, "%s(%d) Tag Name : %s(%d)\n", message, line, tag_stack_element->name, tag_stack_element->name_allocation); 
++    //fprintf(stderr, "%s(%d) Tag Name : %s(%d)\n", message, line, tag_stack_element->name, tag_stack_element->name_allocation); 
 +
 +    for(i = 0;i < tag_stack_element->property_count;i ++){
-+        fprintf(stderr, "[%d]     Property %s[%d] = '%s'(%d) }\n", i, tag_stack_element->property[i].name, tag_stack_element->property[i].name_allocation, tag_stack_element->property[i].value, tag_stack_element->property[i].value_allocation);
++        //fprintf(stderr, "[%d]     Property %s[%d] = '%s'(%d) }\n", i, tag_stack_element->property[i].name, tag_stack_element->property[i].name_allocation, tag_stack_element->property[i].value, tag_stack_element->property[i].value_allocation);
 +    }
 +
 +    return 0;
@@ -927,13 +927,13 @@
 +    int stack_top_index;
 +
 +    if((stack_top_index = stack_top_get((void **)tag_stack, (void *)&tag_stack_top, tag_stack_max)) < 0){
-+        fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__,  __FILE__, __LINE__, "ERROR : Under flow or Over flow in stack. (end tag)");
++        /* fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__,  __FILE__, __LINE__, "ERROR : Under flow or Over flow in stack. (end tag)"); */
 +        return -1;
 +    }
 +
 +    // 바로 이전태그의 시작과 지금태그의 끝이 같아야 함.
 +    if(sami_tag_name_match(tag_name, tag_stack_top->name) < 0){
-+        fprintf(stderr, "[%s][%s(%d)] '%s' '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Not match open/close tag name :", tag_name, tag_stack_top->name);
++        /* fprintf(stderr, "[%s][%s(%d)] '%s' '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Not match open/close tag name :", tag_name, tag_stack_top->name); */
 +        return -2;
 +    }
 +
@@ -966,20 +966,20 @@
 +                    sami_tag_ass_stack(tag_stack, tag_stack_max, ass_tag_text_buffer);
 +                    strcat(ass_tag_text_cat_buffer, ass_tag_text_buffer);
 +                    strncat(ass_tag_text_cat_buffer, text, text_index);
-+                    fprintf(stderr, "InsertText: '%s' '%s' -> '%s'\n", ass_tag_text_buffer, text, ass_tag_text_cat_buffer);
++                    /* fprintf(stderr, "InsertText: '%s' '%s' -> '%s'\n", ass_tag_text_buffer, text, ass_tag_text_cat_buffer); */
 +                    ass_tag_text_buffer[0]  = '\0';
 +                }
 +
 +                /* get tag bracket */
 +                if(sami_tag_container_get(tag_po, &tag_container, &tag_next_po) != 0){
 +                    // not exist close tag (unable search '>')
-+                    fprintf(stderr, "[%s][%s(%d)] '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : get container failed", tag_po);
++                    /* fprintf(stderr, "[%s][%s(%d)] '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : get container failed", tag_po); */
 +                    goto END_OF_LINE;
 +                }
 +
 +                /* get tag name, property */
 +                if((tag_type = sami_tag_name_get(tag_container, &tag_name, &tag_property_flag, &tag_property_start_po)) < 0){
-+                    fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : not have tag name. ignore this tag");
++                    /* fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : not have tag name. ignore this tag"); */
 +                    goto END_OF_TAG;
 +                }
 +
@@ -996,7 +996,7 @@
 +                        break;
 +                } END_OF_TAG:;
 +
-+                fprintf(stderr, "%s <%s> => '%s'\n", tag_type ? "END  " : "START", tag_name, ass_tag_text_cat_buffer);
++                /* fprintf(stderr, "%s <%s> => '%s'\n", tag_type ? "END  " : "START", tag_name, ass_tag_text_cat_buffer); */
 +
 +                text_index  = 0;
 +                text[0]     = '\0';
@@ -1045,7 +1045,7 @@
 +        /* changed */
 +        sami_tag_parse(tag_stack, TAG_STACK_MAX, buffer, &ass_text);
 +        current->text[current->lines++] = ass_text;
-+        fprintf(stderr, "%s : '%s' -> '%s'\n", __FUNCTION__, buffer, ass_text);
++        /* fprintf(stderr, "%s : '%s' -> '%s'\n", __FUNCTION__, buffer, ass_text); */
 +        /* TODO: cleanup stack */
 +    }
 +
