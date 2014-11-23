@@ -1,5 +1,5 @@
 --- subreader_ori.c	2012-05-22 04:17:55.000000000 +0900
-+++ subreader.c	2014-11-10 22:52:42.641777374 +0900
++++ subreader.c	2014-11-23 23:31:00.150002291 +0900
 @@ -24,6 +24,7 @@
  #include <stdio.h>
  #include <stdlib.h>
@@ -59,7 +59,7 @@
  static int eol(char p) {
  	return p=='\r' || p=='\n' || p=='\0';
  }
-@@ -115,13 +144,988 @@
+@@ -115,13 +144,995 @@
      return NULL;
  }
  
@@ -353,10 +353,10 @@
 +        return -1;
 +    }
 +
-+    //fprintf(stderr, "%s(%d) Tag Name : %s(%d)\n", message, line, tag_stack_element->name, tag_stack_element->name_allocation); 
++    fprintf(stderr, "%s(%d) Tag Name : %s(%d)\n", message, line, tag_stack_element->name, tag_stack_element->name_allocation); 
 +
 +    for(i = 0;i < tag_stack_element->property_count;i ++){
-+        //fprintf(stderr, "[%d]     Property %s[%d] = '%s'(%d) }\n", i, tag_stack_element->property[i].name, tag_stack_element->property[i].name_allocation, tag_stack_element->property[i].value, tag_stack_element->property[i].value_allocation);
++        fprintf(stderr, "[%d]     Property %s[%d] = '%s'(%d) }\n", i, tag_stack_element->property[i].name, tag_stack_element->property[i].name_allocation, tag_stack_element->property[i].value, tag_stack_element->property[i].value_allocation);
 +    }
 +
 +    return 0;
@@ -758,17 +758,20 @@
 +    return 0;
 +}/*}}}*/
 +
-+int sami_tag_ass_font_face_tag(void)
++int sami_tag_ass_font_face_tag(const char *face_value, char *ass_face_buffer, const unsigned int ass_color_face_length)
 +{/*{{{*/
++    /* strcat(ass_tag_text_cat_buffer, "{\\fna가시고기B}한글{\\r}"); */
++    snprintf(ass_face_buffer, ass_color_face_length, "\\fn%s", face_value);
++
 +    return 0;
 +}/*}}}*/
 +
-+int sami_tag_ass_set(char *save_buffer, const char *tag_name)
++int sami_tag_ass_set(const char *tag_name, char *buffer)
 +{/*{{{*/
 +    int tag_start_length,
 +        total_length;
 +
-+    if(save_buffer == NULL){
++    if(buffer == NULL){
 +        return -1;
 +    }
 +
@@ -776,12 +779,13 @@
 +        return -2;
 +    }
 +
++    
 +    if((tag_start_length = strlen(tag_name)) == 0){
 +        return -4;
 +    }
 +
 +    total_length = tag_start_length + 4;
-+    snprintf(save_buffer, total_length, "{\\%s}", tag_name);
++    snprintf(buffer, total_length, "{\\%s}", tag_name);
 +
 +    return total_length;
 +}/*}}}*/
@@ -789,7 +793,9 @@
 +int sami_tag_ass_text(const Tag *tag_stack_element, char *ass_tag_buffer)
 +{/*{{{*/
 +    Tag_Property font_property[2];
-+    char ass_color_tag_start[13]; // ass color tag's size is fix 16 (add null)
++    char ass_color_tag[13] = {0}, // ass color tag's size is fix 13 (add null)
++         ass_face_tag[100] = {0},
++         ass_buffer[500] = {0};
 +
 +    if(strcasecmp(tag_stack_element->name, "font") == 0 ){
 +        memset(font_property, 0, sizeof(font_property));
@@ -799,37 +805,34 @@
 +        sami_tag_property_get(tag_stack_element, font_property, 2);
 +
 +        if(strcmp(font_property[0].value, "") != 0){
-+            if(sami_tag_ass_font_color_tag(font_property[0].value, ass_color_tag_start, sizeof(ass_color_tag_start)) < 0){
++            if(sami_tag_ass_font_color_tag(font_property[0].value, ass_color_tag, 13) < 0){
 +                return -1;
 +            }
-+
-+            sami_tag_ass_set(ass_tag_buffer, ass_color_tag_start);
++            sami_tag_ass_set(ass_color_tag, ass_buffer);
++            strcat(ass_tag_buffer, ass_buffer);
 +        }
 +
-+        // face - only englist name, 한글이름은 바로깨짐.
-+        // 일단 fc-list에서 나오는 영문이름으로 하면 잘 나옴.
-+        // fc-list소스를 분석하던가, ass에서 한글명이 되게 하던가...
-+        // 아마 쉽기는 후자가 쉽겠지만, 전자가 될 가능성은 높은듯.
 +        if(strcmp(font_property[1].value, "") != 0){
-+            /* if(sami_tag_ass_font_face_tag(font_property[0].value, ass_color_tag_start) < 0){ */
-+            /*     return -1; */
-+            /* } */
-+            /* sami_tag_ass_set(); */
++            if(sami_tag_ass_font_face_tag(font_property[1].value, ass_face_tag, sizeof(ass_face_tag)) < 0){
++                return -2;
++            }
++            sami_tag_ass_set(ass_face_tag, ass_buffer);
++            strcat(ass_tag_buffer, ass_buffer);
 +        }
 +
 +        //ass_tag_buffer = ass_tag_font_color + ass_tag_font_face;
 +    // bold - operate OK, but 
 +    }else if(strcasecmp(tag_stack_element->name, "b") == 0 ){
-+        sami_tag_ass_set(ass_tag_buffer, "b900");
++        sami_tag_ass_set("b900", ass_tag_buffer);
 +    // ltalic - OK
 +    }else if(strcasecmp(tag_stack_element->name, "i") == 0 ){
-+        sami_tag_ass_set(ass_tag_buffer, "i1");
++        sami_tag_ass_set("i1", ass_tag_buffer);
 +    // underline - OK
 +    }else if(strcasecmp(tag_stack_element->name, "u") == 0 ){
-+        sami_tag_ass_set(ass_tag_buffer, "u1");
++        sami_tag_ass_set("u1", ass_tag_buffer);
 +    // strike - OK
 +    }else if(strcasecmp(tag_stack_element->name, "s") == 0 ){
-+        sami_tag_ass_set(ass_tag_buffer, "s1");
++        sami_tag_ass_set("s1", ass_tag_buffer);
 +    // ruby - OK (TODO: must be check "ruby" in tag stck)
 +    // UP   : <ruby>주석을 달려는 자막<rt>주석</rt></ruby>
 +    // DOWN : 주석을 달려는 자막<ruby><rt>주석</rt><ruby>
@@ -864,8 +867,10 @@
 +            return -2;
 +        }
 +        /* fprintf(stderr, "TStack: [%d] %s\n", i, ass_stack_buffer); */
-+
 +        strcat(ass_tag_buffer, ass_stack_buffer);
++
++        // must!
++        ass_stack_buffer[0] = '\0';
 +    }
 +
 +    return 1;
@@ -885,7 +890,7 @@
 +
 +    if(tag_property_flag == 1){
 +        if(sami_tag_property_set(tag_property_start_po, &tag_stack_element_now) < 0){
-+            fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Set Tag Property Failed");
++            //fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Set Tag Property Failed");
 +            sami_tag_stack_element_free(&tag_stack_element_now);
 +            return -1;
 +        }
@@ -900,7 +905,7 @@
 +    }
 +
 +    if(stack_push((void **)tag_stack, &tag_stack_element_push, sizeof(Tag), tag_stack_max) < 0){
-+        fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Stack Push Failed");
++        //fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Stack Push Failed");
 +        sami_tag_stack_element_free(&tag_stack_element_now);
 +        return -3;
 +    }
@@ -927,13 +932,13 @@
 +    int stack_top_index;
 +
 +    if((stack_top_index = stack_top_get((void **)tag_stack, (void *)&tag_stack_top, tag_stack_max)) < 0){
-+        /* fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__,  __FILE__, __LINE__, "ERROR : Under flow or Over flow in stack. (end tag)"); */
++        //fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__,  __FILE__, __LINE__, "ERROR : Under flow or Over flow in stack. (end tag)");
 +        return -1;
 +    }
 +
 +    // 바로 이전태그의 시작과 지금태그의 끝이 같아야 함.
 +    if(sami_tag_name_match(tag_name, tag_stack_top->name) < 0){
-+        /* fprintf(stderr, "[%s][%s(%d)] '%s' '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Not match open/close tag name :", tag_name, tag_stack_top->name); */
++        //fprintf(stderr, "[%s][%s(%d)] '%s' '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : Not match open/close tag name :", tag_name, tag_stack_top->name);
 +        return -2;
 +    }
 +
@@ -966,20 +971,20 @@
 +                    sami_tag_ass_stack(tag_stack, tag_stack_max, ass_tag_text_buffer);
 +                    strcat(ass_tag_text_cat_buffer, ass_tag_text_buffer);
 +                    strncat(ass_tag_text_cat_buffer, text, text_index);
-+                    /* fprintf(stderr, "InsertText: '%s' '%s' -> '%s'\n", ass_tag_text_buffer, text, ass_tag_text_cat_buffer); */
++                    //fprintf(stderr, "InsertText: '%s' '%s' -> '%s'\n", ass_tag_text_buffer, text, ass_tag_text_cat_buffer);
 +                    ass_tag_text_buffer[0]  = '\0';
 +                }
 +
 +                /* get tag bracket */
 +                if(sami_tag_container_get(tag_po, &tag_container, &tag_next_po) != 0){
 +                    // not exist close tag (unable search '>')
-+                    /* fprintf(stderr, "[%s][%s(%d)] '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : get container failed", tag_po); */
++                    //fprintf(stderr, "[%s][%s(%d)] '%s' '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : get container failed", tag_po);
 +                    goto END_OF_LINE;
 +                }
 +
 +                /* get tag name, property */
 +                if((tag_type = sami_tag_name_get(tag_container, &tag_name, &tag_property_flag, &tag_property_start_po)) < 0){
-+                    /* fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : not have tag name. ignore this tag"); */
++                    //fprintf(stderr, "[%s][%s(%d)] '%s'\n", __TIME__, __FILE__, __LINE__, "ERROR : not have tag name. ignore this tag");
 +                    goto END_OF_TAG;
 +                }
 +
@@ -990,13 +995,14 @@
 +                        /* sami_tag_stack_print(__LINE__, tag_stack, tag_stack_max, "Tag Start Push OK, Stack Result :"); */
 +                        break;
 +                    case 1: /* End tag      - (Stack Pop)  */
++                        // TODO???
 +                        sami_tag_parse_end(tag_stack, tag_stack_max, tag_name);
 +                        strcat(ass_tag_text_cat_buffer, "{\\r}");
 +                        /* sami_tag_stack_print(__LINE__, tag_stack, tag_stack_max, "Tag End   Pop  OK, Stack Result :"); */
 +                        break;
 +                } END_OF_TAG:;
 +
-+                /* fprintf(stderr, "%s <%s> => '%s'\n", tag_type ? "END  " : "START", tag_name, ass_tag_text_cat_buffer); */
++                //fprintf(stderr, "%s <%s> => '%s'\n", tag_type ? "END  " : "START", tag_name, ass_tag_text_cat_buffer);
 +
 +                text_index  = 0;
 +                text[0]     = '\0';
@@ -1010,6 +1016,7 @@
 +                break;
 +        }
 +    } END_OF_LINE:;
++
 +
 +    if(strcmp(ass_tag_text_cat_buffer, "") != 0){
 +        strncat(ass_tag_text_cat_buffer, text, text_index);
@@ -1045,7 +1052,7 @@
 +        /* changed */
 +        sami_tag_parse(tag_stack, TAG_STACK_MAX, buffer, &ass_text);
 +        current->text[current->lines++] = ass_text;
-+        /* fprintf(stderr, "%s : '%s' -> '%s'\n", __FUNCTION__, buffer, ass_text); */
++        //fprintf(stderr, "%s : '%s' -> '%s'\n", __FUNCTION__, buffer, ass_text);
 +        /* TODO: cleanup stack */
 +    }
 +
@@ -1054,7 +1061,7 @@
  }
  
  static subtitle *sub_read_line_sami(stream_t* st, subtitle *current, int utf16) {
-@@ -129,10 +1133,11 @@
+@@ -129,10 +1140,11 @@
      static char *s = NULL, *slacktime_s;
      char text[LINE_LEN+1], *p=NULL, *q;
      int state;
@@ -1069,7 +1076,7 @@
  
      /* read the first line */
      if (!s)
-@@ -163,7 +1168,7 @@
+@@ -163,7 +1175,7 @@
  	    s++;
  	    if (*s == 'P' || *s == 'p') { s++; state = 2; continue; } /* found '<P' */
  	    for (; *s != '>' && *s != '\0'; s++); /* skip remains of non-<P> TAG */
@@ -1078,7 +1085,7 @@
  	      break;
  	    s++;
  	    continue;
-@@ -173,11 +1178,12 @@
+@@ -173,11 +1185,12 @@
  	    break;
  
  	case 3: /* get all text until '<' appears */
@@ -1094,7 +1101,7 @@
  		s += 4;
  	    }
  	    else if ((*s == '{') && !sub_no_text_pp) { state = 5; ++s; continue; }
-@@ -197,16 +1203,18 @@
+@@ -197,16 +1210,18 @@
  	    if (q) {
  		current->end = strtol (q + 6, &q, 0) / 10 - 1;
  		*p = '\0'; trail_space (text);
@@ -1118,7 +1125,7 @@
                 if (stristr(s, "\\a1") != NULL) {
                     current->alignment = SUB_ALIGNMENT_BOTTOMLEFT;
                     s = s + 3;
-@@ -236,7 +1244,7 @@
+@@ -236,7 +1251,7 @@
                     current->alignment = SUB_ALIGNMENT_MIDDLERIGHT;
                     s = s + 4;
                 }
@@ -1127,7 +1134,7 @@
  	    if (*s == '}') state = 3;
  	    ++s;
  	    continue;
-@@ -245,6 +1253,19 @@
+@@ -245,6 +1260,19 @@
  	/* read next line */
  	if (state != 99 && !(s = stream_read_line (st, line, LINE_LEN, utf16))) {
  	    if (current->start > 0) {
@@ -1142,12 +1149,12 @@
 +        subtitle_last   = strndup(text, end_point - text);
 +
 +        sami_add_line(current, subtitle_last, NULL, tag_stack);
-+        fprintf(stderr, "LAST LINE2 : %s '%s'\n", subtitle_last, line);
++        //fprintf(stderr, "LAST LINE2 : %s '%s'\n", subtitle_last, line);
 +        free(subtitle_last);
  		break; // if it is the last subtitle
  	    } else {
  		return 0;
-@@ -256,7 +1277,7 @@
+@@ -256,7 +1284,7 @@
      // For the last subtitle
      if (current->end <= 0) {
          current->end = current->start + sub_slacktime;
@@ -1156,7 +1163,7 @@
      }
  
      return current;
-@@ -274,7 +1295,7 @@
+@@ -274,7 +1302,7 @@
      }
  
      *dest= malloc (len+1);
@@ -1165,7 +1172,7 @@
  
      strncpy(*dest, source, len);
      (*dest)[len]=0;
-@@ -377,14 +1398,14 @@
+@@ -377,14 +1405,14 @@
      int h1, m1, s1, ms1, h2, m2, s2, ms2, j = 0;
  
      while (!current->text[0]) {
@@ -1183,7 +1190,7 @@
              continue;
  
          current->start = h1 * 360000 + m1 * 6000 + s1 * 100 + ms1 / 10;
-@@ -441,7 +1462,7 @@
+@@ -441,7 +1469,7 @@
  #endif
      while (!current->text[0]) {
  	if (!stream_read_line (st, line, LINE_LEN, utf16)) return NULL;
@@ -1192,7 +1199,7 @@
  	    continue;
  	current->start = a1*360000+a2*6000+a3*100+a4/10;
  	current->end   = b1*360000+b2*6000+b3*100+b4/10;
-@@ -677,7 +1698,7 @@
+@@ -677,7 +1705,7 @@
              tmp = line2;
              if(!(tmp=strchr(++tmp, ','))) break;
              if(brace && brace < tmp) break; // comma inside command
@@ -1201,7 +1208,7 @@
                    /* a space after a comma means we're already in a sentence */
              line2 = tmp;
            }
-@@ -1097,9 +2118,11 @@
+@@ -1097,9 +2125,11 @@
  	    }			//-- switch
  	}			//-- for
  	*q = '\0';
@@ -1215,7 +1222,7 @@
      return current;
  }
  
-@@ -1120,7 +2143,7 @@
+@@ -1120,7 +2150,7 @@
  		{*uses_time=1;return SUB_MPL2;}
  	if (sscanf (line, "%d:%d:%d.%d,%d:%d:%d.%d",     &i, &i, &i, &i, &i, &i, &i, &i)==8)
  		{*uses_time=1;return SUB_SUBRIP;}
